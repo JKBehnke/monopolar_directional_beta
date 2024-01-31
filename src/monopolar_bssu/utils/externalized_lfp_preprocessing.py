@@ -99,3 +99,87 @@ def notch_filter_externalized(fs: int, signal: np.array):
     filtered_signal = scipy.signal.filtfilt(b, a, signal)
 
     return filtered_signal
+
+
+def cut_lfp_in_20_sec_chunks(time_series: np.ndarray):
+    """
+    Input:
+        - time_series: LFP data of one channel, sfreq 250 Hz, 2 min recording (30000 samples)
+
+    Cut the LFP data into 20 sec chunks á 5000 samples
+
+    Output:
+        - result_dict: dictionary with 6 keys (1-6), each key has a value of 5000 samples of the LFP data
+
+    """
+
+    result_dict = {}
+
+    for i in range(1, 7):  # list from 1 to 6
+        start_index = (i - 1) * 5000  # 0, 5000, 10000, 15000, 20000, 25000
+        end_index = i * 5000  # 5000, 10000, 15000, 20000, 25000, 30000
+        result_dict[i] = time_series[start_index:end_index]
+
+    return result_dict
+
+
+def fourier_transform_to_psd(sfreq: int, lfp_data: np.ndarray):
+    """
+    Input:
+        -
+
+    Requirements:
+        - 2 min recording
+        - artefracts removed
+
+    calculate the power spectrum:
+        - window length = 250 # 1 second window length
+        - overlap = window_length // 4 # 25% overlap
+        - window = hann(window_length, sym=False)
+        - frequencies, times, Zxx = scipy.signal.spectrogram(band_pass_filtered, fs=fs, window=window, noverlap=overlap, scaling="density", mode="psd", axis=0)
+
+
+    Output:
+        - frequencies
+        - times
+        - Zxx
+        - average_Zxx
+        - std_Zxx
+        - sem_Zxx
+
+
+    """
+
+    ######### short time fourier transform to calculate PSD #########
+    window_length = sfreq  # 1 second window length
+    overlap = window_length // 4  # 25% overlap
+
+    # Calculate the short-time Fourier transform (STFT) using Hann window
+    window = hann(window_length, sym=False)
+
+    frequencies, times, Zxx = scipy.signal.spectrogram(
+        lfp_data,
+        fs=sfreq,
+        window=window,
+        noverlap=overlap,
+        scaling="density",
+        mode="psd",
+        axis=0,
+    )
+    # Frequencies: 0-125 Hz (1 Hz resolution), Nyquist fs/2
+    # times: len=161, 0, 0.75, 1.5 .... 120.75
+    # Zxx: 126 arrays, each len=161
+
+    # average PSD across duration of the recording
+    average_Zxx = np.mean(Zxx, axis=1)
+    std_Zxx = np.std(Zxx, axis=1)
+    sem_Zxx = std_Zxx / np.sqrt(Zxx.shape[1])
+
+    return {
+        "frequencies": frequencies,
+        "times": times,
+        "Zxx": Zxx,
+        "average_Zxx": average_Zxx,
+        "std_Zxx": std_Zxx,
+        "sem_Zxx": sem_Zxx,
+    }

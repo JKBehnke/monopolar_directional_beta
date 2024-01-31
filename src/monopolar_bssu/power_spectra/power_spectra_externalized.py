@@ -160,3 +160,134 @@ def plot_power_spectra_monopolar(method: str, fooof: str, only_directional: str)
             filename=f"power_spectra_{method}_{sub_hem}_{directionality_filename}",
             figure=fig,
         )
+
+
+def plot_power_spectra_20sec_externalized_bssu():
+    """
+    Input:
+
+    Data:
+        - externalized data re-referenced to BSSU
+        - artefact free
+        - 2 min duration
+        - sfreq 250 Hz
+        - filtered LFP: notch and band pass filtered
+
+    Plot each channel of the dataframe in one plot: 6 chunks of 20 sec each and the average Power Spectrum of 2 min
+
+
+
+    """
+
+    # load the BSSU externalized data
+    extern_bssu_data = io_externalized.load_externalized_pickle(
+        filename="externalized_directional_bssu_channels",
+        reference="bipolar_to_lowermost",
+    )
+    bids_id_unique = list(extern_bssu_data["BIDS_id"].unique())
+
+    # for every hemisphere, plot all BSSU channels
+    for bids_id in bids_id_unique:
+        # get data
+        sub_data = extern_bssu_data.loc[extern_bssu_data.BIDS_id == bids_id]
+
+        # figure path
+        figures_path = find_folders.get_monopolar_project_path(
+            folder="figures", sub=bids_id
+        )
+
+        for hem in HEMISPHERES:
+            # get data for one hemisphere
+            hem_data = sub_data.loc[sub_data.hemisphere == hem]
+            sub_hem = hem_data["subject_hemisphere"].values[0]
+
+            # get the channels
+            for chan in BSSU_CHANNELS:
+                chan_data = hem_data.loc[hem_data.bipolar_channel == chan]
+
+                # get the fitered time series
+                filtered_time_series = chan_data["filtered_lfp_250Hz"].values[0]
+
+                # fourier transform of the 2 min time series
+                fourier_transform_2min = (
+                    externalized_lfp_preprocessing.fourier_transform_to_psd(
+                        sfreq=250, lfp_data=filtered_time_series
+                    )
+                )
+
+                # cut in 20 sec chunks --> dictionary with keys 1 to 6
+                chunks = externalized_lfp_preprocessing.cut_lfp_in_20_sec_chunks(
+                    time_series=filtered_time_series
+                )
+
+                # figure layout for one subject hemisphere
+                fig = plt.figure(figsize=(20, 20), layout="tight")
+                fig.suptitle(
+                    f"Power Spectra BSSU externalized: {sub_hem}, {chan}",
+                    fontsize=55,
+                    y=1.02,
+                )
+
+                # plot power spectra
+                plt.subplot(1, 1, 1)
+
+                # plot the average power spectrum of the 2 min recording
+                plt.plot(
+                    fourier_transform_2min["frequencies"],
+                    fourier_transform_2min["average_Zxx"],
+                    label="2 min",
+                    linewidth=7,
+                    color="black",
+                )
+                plt.fill_between(
+                    fourier_transform_2min["frequencies"],
+                    fourier_transform_2min["average_Zxx"]
+                    - fourier_transform_2min["sem_Zxx"],
+                    fourier_transform_2min["average_Zxx"]
+                    + fourier_transform_2min["sem_Zxx"],
+                    color="lightgray",
+                    alpha=0.5,
+                )
+
+                for c in chunks.keys():
+                    fourier_transform_chunk = (
+                        externalized_lfp_preprocessing.fourier_transform_to_psd(
+                            sfreq=250, lfp_data=chunks[c]
+                        )
+                    )
+
+                    plt.plot(
+                        fourier_transform_chunk["frequencies"],
+                        fourier_transform_chunk["average_Zxx"],
+                        label=f"{c}: 20sec",
+                        linewidth=3,
+                    )
+
+                    plt.fill_between(
+                        fourier_transform_chunk["frequencies"],
+                        fourier_transform_chunk["average_Zxx"]
+                        - fourier_transform_chunk["sem_Zxx"],
+                        fourier_transform_chunk["average_Zxx"]
+                        + fourier_transform_chunk["sem_Zxx"],
+                        color="lightgray",
+                        alpha=0.5,
+                    )
+
+                    plt.xlabel("Frequency [Hz]", fontdict={"size": 40})
+                    plt.ylabel("PSD +- SEM", fontdict={"size": 40})
+
+                    plt.xlim(0, 80)
+                    plt.xticks(fontsize=35)
+                    plt.yticks(fontsize=35)
+
+                    # Plot the legend only for the first row "postop"
+                    plt.legend(loc="upper right", edgecolor="black", fontsize=40)
+
+                plt.show()
+
+                # save figure
+                io_externalized.save_fig_png_and_svg(
+                    path=figures_path,
+                    filename=f"power_spectra_BSSU_externalized_20sec_{sub_hem}_{chan}",
+                    figure=fig,
+                )
