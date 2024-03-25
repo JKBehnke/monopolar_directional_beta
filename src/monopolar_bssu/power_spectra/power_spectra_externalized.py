@@ -15,6 +15,7 @@ from fooof.plts.spectra import plot_spectrum
 from ..utils import find_folders as find_folders
 from ..utils import io_externalized as io_externalized
 from ..utils import loadResults as loadResults
+from ..utils import sub_recordings_dict as sub_recordings_dict
 from ..utils import externalized_lfp_preprocessing as externalized_lfp_preprocessing
 from ..externalized_lfp import feats_ssd as feats_ssd
 
@@ -162,9 +163,81 @@ def plot_power_spectra_monopolar(method: str, fooof: str, only_directional: str)
         )
 
 
-def plot_power_spectra_20sec_externalized_bssu():
+def plot_power_spectra_20sec_externalized_bssu(sub_hem:str, chan:str, fourier_transform_2min, chunks:dict):
+    """
+    
+    """
+    # figure layout for one subject hemisphere
+    fig = plt.figure(figsize=(20, 20), layout="tight")
+    fig.suptitle(
+        f"Power Spectra BSSU externalized: {sub_hem}, {chan}",
+        fontsize=55,
+        y=1.02,
+    )
+
+    # plot power spectra
+    plt.subplot(1, 1, 1)
+
+    # plot the average power spectrum of the 2 min recording
+    plt.plot(
+        fourier_transform_2min["frequencies"],
+        fourier_transform_2min["average_Zxx"],
+        label="2 min",
+        linewidth=7,
+        color="black",
+    )
+    plt.fill_between(
+        fourier_transform_2min["frequencies"],
+        fourier_transform_2min["average_Zxx"]
+        - fourier_transform_2min["sem_Zxx"],
+        fourier_transform_2min["average_Zxx"]
+        + fourier_transform_2min["sem_Zxx"],
+        color="lightgray",
+        alpha=0.5,
+    )
+
+    for c in chunks.keys():
+        fourier_transform_chunk = (
+            externalized_lfp_preprocessing.fourier_transform_to_psd(
+                sfreq=250, lfp_data=chunks[c]
+            )
+        )
+
+        plt.plot(
+            fourier_transform_chunk["frequencies"],
+            fourier_transform_chunk["average_Zxx"],
+            label=f"{c}: 20sec",
+            linewidth=3,
+        )
+
+        plt.fill_between(
+            fourier_transform_chunk["frequencies"],
+            fourier_transform_chunk["average_Zxx"]
+            - fourier_transform_chunk["sem_Zxx"],
+            fourier_transform_chunk["average_Zxx"]
+            + fourier_transform_chunk["sem_Zxx"],
+            color="lightgray",
+            alpha=0.5,
+        )
+
+        plt.xlabel("Frequency [Hz]", fontdict={"size": 40})
+        plt.ylabel("PSD +- SEM", fontdict={"size": 40})
+
+        plt.xlim(0, 80)
+        plt.xticks(fontsize=35)
+        plt.yticks(fontsize=35)
+
+        # Plot the legend only for the first row "postop"
+        plt.legend(loc="upper right", edgecolor="black", fontsize=40)
+    
+    return fig
+
+
+
+def bssu_externalized_power_spectra_20sec(incl_sub:list):
     """
     Input:
+        - incl_sub: list e.g. ["noBIDS24"]
 
     Data:
         - externalized data re-referenced to BSSU
@@ -175,6 +248,9 @@ def plot_power_spectra_20sec_externalized_bssu():
 
     Plot each channel of the dataframe in one plot: 6 chunks of 20 sec each and the average Power Spectrum of 2 min
 
+    Output:
+        - Figure: Power Spectra of 2 min and 6 chunks of 20 sec
+        - Data: Power Spectra of 2 min and 6 chunks of 20 sec saved as "power_spectra_BSSU_externalized_20sec" in bids-id results folder
 
 
     """
@@ -184,16 +260,27 @@ def plot_power_spectra_20sec_externalized_bssu():
         filename="externalized_directional_bssu_channels",
         reference="bipolar_to_lowermost",
     )
-    bids_id_unique = list(extern_bssu_data["BIDS_id"].unique())
+    
+    if incl_sub == ["all"]:
+        bids_id_unique = list(extern_bssu_data["BIDS_id"].unique())
+    
+    else:
+        bids_id_unique = incl_sub
 
     # for every hemisphere, plot all BSSU channels
     for bids_id in bids_id_unique:
+        sub_result_df = pd.DataFrame()
+
         # get data
         sub_data = extern_bssu_data.loc[extern_bssu_data.BIDS_id == bids_id]
 
         # figure path
         figures_path = find_folders.get_monopolar_project_path(
             folder="figures", sub=bids_id
+        )
+
+        results_path = find_folders.get_monopolar_project_path(
+            folder="results", sub=bids_id
         )
 
         for hem in HEMISPHERES:
@@ -220,74 +307,103 @@ def plot_power_spectra_20sec_externalized_bssu():
                     time_series=filtered_time_series
                 )
 
-                # figure layout for one subject hemisphere
-                fig = plt.figure(figsize=(20, 20), layout="tight")
-                fig.suptitle(
-                    f"Power Spectra BSSU externalized: {sub_hem}, {chan}",
-                    fontsize=55,
-                    y=1.02,
-                )
-
-                # plot power spectra
-                plt.subplot(1, 1, 1)
-
-                # plot the average power spectrum of the 2 min recording
-                plt.plot(
-                    fourier_transform_2min["frequencies"],
-                    fourier_transform_2min["average_Zxx"],
-                    label="2 min",
-                    linewidth=7,
-                    color="black",
-                )
-                plt.fill_between(
-                    fourier_transform_2min["frequencies"],
-                    fourier_transform_2min["average_Zxx"]
-                    - fourier_transform_2min["sem_Zxx"],
-                    fourier_transform_2min["average_Zxx"]
-                    + fourier_transform_2min["sem_Zxx"],
-                    color="lightgray",
-                    alpha=0.5,
-                )
-
-                for c in chunks.keys():
-                    fourier_transform_chunk = (
-                        externalized_lfp_preprocessing.fourier_transform_to_psd(
-                            sfreq=250, lfp_data=chunks[c]
-                        )
-                    )
-
-                    plt.plot(
-                        fourier_transform_chunk["frequencies"],
-                        fourier_transform_chunk["average_Zxx"],
-                        label=f"{c}: 20sec",
-                        linewidth=3,
-                    )
-
-                    plt.fill_between(
-                        fourier_transform_chunk["frequencies"],
-                        fourier_transform_chunk["average_Zxx"]
-                        - fourier_transform_chunk["sem_Zxx"],
-                        fourier_transform_chunk["average_Zxx"]
-                        + fourier_transform_chunk["sem_Zxx"],
-                        color="lightgray",
-                        alpha=0.5,
-                    )
-
-                    plt.xlabel("Frequency [Hz]", fontdict={"size": 40})
-                    plt.ylabel("PSD +- SEM", fontdict={"size": 40})
-
-                    plt.xlim(0, 80)
-                    plt.xticks(fontsize=35)
-                    plt.yticks(fontsize=35)
-
-                    # Plot the legend only for the first row "postop"
-                    plt.legend(loc="upper right", edgecolor="black", fontsize=40)
-
-                plt.show()
+                figure = plot_power_spectra_20sec_externalized_bssu(sub_hem=sub_hem, 
+                                                                    chan=chan, 
+                                                                    fourier_transform_2min=fourier_transform_2min, 
+                                                                    chunks=chunks)
 
                 # save figure
                 io_externalized.save_fig_png_and_svg(
                     path=figures_path,
                     filename=f"power_spectra_BSSU_externalized_20sec_{sub_hem}_{chan}",
-                    figure=fig,
+                    figure=figure,
                 )
+
+                # save the data
+                sub_result = {
+                    "bids_id": [bids_id],
+                    "hemisphere": [hem],
+                    "channel": [chan],
+                    "chunks": [chunks],
+                    "fourier_transform_2min": [fourier_transform_2min],
+                }
+
+                sub_result_df_single = pd.DataFrame(sub_result)
+                sub_result_df = pd.concat([sub_result_df, sub_result_df_single],ignore_index=True)
+        
+        # save subject result
+        io_externalized.save_sub_result_as_pickle(data=sub_result_df, 
+                                                  filename="power_spectra_BSSU_externalized_20sec",
+                                                  results_path=results_path)
+
+    return sub_result_df
+
+
+def group_20sec_power_spectra_externalized_bssu(incl_bids_id: list):
+    """
+    Reads all "power_spectra_BSSU_externalized_20sec" files from the results folder and groups them together
+    
+    Input:
+        - incl_sub: list e.g. ["L003", "noBIDS24"]
+
+    """
+    group_20sec_dataframe = pd.DataFrame()  # empty dataframe
+
+    if incl_bids_id == ["all"]:
+        # get a list of all bids ids
+        bids_id_list = sub_recordings_dict.get_bids_id_all_list()
+    
+    else:
+        bids_id_list = incl_bids_id
+    
+    for bids_id in bids_id_list:
+        # get the results path
+        results_path = find_folders.get_monopolar_project_path(
+            folder="results", sub=bids_id
+        )
+
+        # check if file exists
+        if os.path.exists(os.path.join(results_path, "power_spectra_BSSU_externalized_20sec.pickle")) == False:
+            print(f"No data for {bids_id}")
+            continue
+
+        # load the data
+        sub_result_df = io_externalized.load_sub_result_pickle(
+            bids_id=bids_id,
+            filename="power_spectra_BSSU_externalized_20sec"
+        )
+
+        # add subject to the dataframe
+        sub = sub_recordings_dict.get_sub_from_bids_id(bids_id)
+        sub_result_df["subject"] = sub
+
+        # add the dataframe to the group dataframe
+        group_20sec_dataframe = pd.concat(
+            [group_20sec_dataframe, sub_result_df], ignore_index=True
+        )
+
+    # save as pickle
+    io_externalized.save_result_dataframe_as_pickle(data=group_20sec_dataframe,filename="power_spectra_BSSU_externalized_20sec_group")
+
+    return group_20sec_dataframe
+
+    
+
+            
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                

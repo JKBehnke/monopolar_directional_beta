@@ -68,7 +68,7 @@ def load_patient_metadata_externalized():
 def load_excel_data(filename: str):
     """
     Input:
-        - filename: "patient_metadata", "movement_artefacts"
+        - filename: "patient_metadata", "movement_artefacts", "ecg_artifacts"
 
     """
 
@@ -82,6 +82,9 @@ def load_excel_data(filename: str):
 
     if filename in patient_metadata_sheet:
         sheet_name = "patient_metadata"
+    
+    elif filename == "ecg_artifacts":
+        sheet_name = "ecg_artifacts"
 
     filepath = os.path.join(path, f_name)
 
@@ -239,6 +242,25 @@ def load_BIDS_externalized_vhdr_files(sub: str):
         data.load_data()
 
         return data
+    
+def load_sub_result_pickle(bids_id: str, filename: str):
+    """
+
+    Input:
+        - bids_id: str, e.g. "sub-EL001"
+        - filename: str, e.g."power_spectra_BSSU_externalized_20sec"
+    """
+    results_path = find_folders.get_monopolar_project_path(folder="results", sub=bids_id)
+
+    pickle_filename = f"{filename}.pickle"
+
+    filepath = os.path.join(results_path, pickle_filename)
+
+    # load the file
+    with open(filepath, "rb") as file:
+        data = pickle.load(file)
+    
+    return data
 
 
 def load_externalized_pickle(filename: str, fooof_version=None, reference=None):
@@ -444,6 +466,25 @@ def load_patient_data(patient: str):
 
 ############# SAVE DATA #############
 
+def save_sub_result_as_pickle(data, filename: str, results_path: str):
+    """
+    Input:
+        - data: any
+        - filename: str, e.g."externalized_preprocessed_data"
+        - results_path: str, use 
+            results_path = find_folders.get_monopolar_project_path(
+                folder="results", sub=bids_id
+                )
+
+    picklefile will be written in the group_results_path:
+
+    """
+
+    data_path = os.path.join(results_path, f"{filename}.pickle")
+    with open(data_path, "wb") as file:
+        pickle.dump(data, file)
+
+    print(f"{filename}.pickle", f"\nwritten in: {results_path}")
 
 def save_result_dataframe_as_pickle(data: pd.DataFrame, filename: str):
     """

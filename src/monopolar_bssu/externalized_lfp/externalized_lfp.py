@@ -681,6 +681,12 @@ def clean_artefacts(reference=None):
     return artefact_free_dataframe
 
 
+# function to clean ecg artifacts from 
+    #     artefact_free_lfp = io_externalized.load_externalized_pickle(
+    #     filename="externalized_preprocessed_data_artefact_free", reference=reference
+    # )
+
+
 def fourier_transform_to_psd(reference=None):
     """
     Input:
