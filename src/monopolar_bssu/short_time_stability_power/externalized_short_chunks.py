@@ -63,6 +63,18 @@ BSSU_SEGM_INTRA_CHANNELS = [
     "2B2C",
 ]
 
+BSSU_SEGM_CHANNELS = [
+    "1A2A",
+    "1B2B",
+    "1C2C",
+    "1A1B",
+    "1A1C",
+    "1B1C",
+    "2A2B",
+    "2A2C",
+    "2B2C",
+]
+
 FILTER = {
     "notch_and_band_pass_filtered": "filtered_lfp_250Hz",
     "unfiltered": "lfp_resampled_250Hz",
@@ -328,7 +340,7 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
     Input:
         - filtered: str "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
         - freq_band: str "beta", "high_beta", "low_beta"
-        - channel_group: str "all", "ring", "segm_inter", "segm_intra"
+        - channel_group: str "all", "ring", "segm_inter", "segm_intra", "segm"
 
     """
 
@@ -347,6 +359,9 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
     
     elif channel_group == "segm_intra":
         channels = BSSU_SEGM_INTRA_CHANNELS
+    
+    elif channel_group == "segm":
+        channels = BSSU_SEGM_CHANNELS
 
     freq_band_data_all = frequency_band_mean_sd(filtered=filtered)
 
@@ -381,6 +396,9 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
         "maximal_power_data": maximal_power_data,
         "maximal_power_patient_ids": patient_ids}
 
+
+
+################### STATISTICAL TESTS #####################
 
 def shapiro_wilk_means_distribution(filtered:str, freq_band:str, channel_group:str):
     """
@@ -423,4 +441,254 @@ def shapiro_wilk_means_distribution(filtered:str, freq_band:str, channel_group:s
         shapiro_wilk_result = pd.concat([shapiro_wilk_result, shapiro_wilk_one_row_df], ignore_index=True)
     
     return shapiro_wilk_result
+
+def calculate_z_score(measurements:list):
+    """
+    This function calculates the z-score of a list of measurements:
+        z = (x - mean) / std
+    
+        A z-score describes how many standard deviations a measurement is from the population mean.
+
+    Output:
+        - z_score: list of z-scores
+        - mean: mean of the measurements
+        - std: standard deviation of the measurements
+
+    """
+
+    # check if all measurements are the same, in this case std becomes zero and division by zero is not possible
+    if np.std(measurements) != 0:
+        z_score = [(x - np.mean(measurements)) / np.std(measurements) for x in measurements]
+    
+    else: 
+        z_score = [0] * len(measurements)
+
+    return {
+        "z_score": z_score,
+        "mean": np.mean(measurements),
+        "std": np.std(measurements)}
+
+
+
+def tukey_mean_difference_plot(filtered:str, freq_band:str, channel_group:str, z_score:str):
+    """
+    For each patient hemisphere, one maximal power channel:
+    Calculate the MEAN and DIFFERENCE TO MEAN of 5 x 20 sec power spectra within each patient hemisphere
+
+    Input:
+        - filtered: str "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
+        - freq_band: str "beta", "high_beta", "low_beta"
+        - channel_group: str "all", "ring", "segm_inter", "segm_intra", "segm"
+        - z_score: str "yes", "no"
+
+    """
+    all_differences_to_group_mean = []
+
+    fig = plt.figure(figsize=(10, 10), layout='tight')
+    plt.subplot(1,1,1)
+
+    # load the maximal power data for each sub, hem
+    maximal_power_data = rank_power_2min(filtered=filtered, freq_band=freq_band, channel_group=channel_group)["maximal_power_data"]
+
+    # merge together columns "subject", "hemisphere", "channel" to get unique patient ids
+    maximal_power_data["patient_id"] = maximal_power_data["subject"] + "_" + maximal_power_data["hemisphere"] + "_" + maximal_power_data["channel"]
+    patient_ids = maximal_power_data['patient_id'].unique()
+
+    for patient_id in patient_ids:
+        patient_data = maximal_power_data[maximal_power_data['patient_id'] == patient_id]
+        
+        measurements = []
+        for i in range(1, 6): # 5 x 20 sec power averages
+            column_name = f'power_spectrum_20sec_{i}_mean'
+            measurements.append(patient_data[column_name].values[0])
+
+        if z_score == "yes":
+            z_score_data = calculate_z_score(measurements=measurements)
+            measurements = z_score_data["z_score"] # list of z-scores for each measurement
+        
+        # calculate mean and difference to mean
+        mean_of_measurements = np.mean(measurements)
+        difference_to_mean = [x - mean_of_measurements for x in measurements]
+
+        all_differences_to_group_mean.extend(difference_to_mean)        
+
+        # plot the group mean (x-axis) and the difference to the group mean (y-axis) of the same patient with the same color
+        plt.plot([mean_of_measurements]*5, difference_to_mean, 'o', linestyle='-', label=patient_id, alpha=0.5)
+
+        # plt.plot([0, len(difference_to_mean)-1], [np.mean(difference_to_mean), np.mean(difference_to_mean)], linestyle='--', color='grey', alpha=0.5)
+    
+    # calculate the mean of all differences to group mean
+    mean_all_differences = np.mean(all_differences_to_group_mean)
+    ci_upper = mean_all_differences + 1.96 * np.std(all_differences_to_group_mean)
+    ci_lower = mean_all_differences - 1.96 * np.std(all_differences_to_group_mean)
+
+    sample_size = len(patient_ids)
+
+    # Plot the Tukey mean-difference plot
+    if z_score == "yes":
+        plt.xlabel('Group Mean (z-score)')
+        plt.ylabel('Difference to Group Mean (z-score)')
+    else:
+        plt.xlabel('Group Mean')
+        plt.ylabel('Difference to Group Mean')
+    
+    plt.grid(True)
+    plt.axhline(y=mean_all_differences, color='r', linestyle='--', linewidth=2)  # Add a horizontal line at the mean of all differences
+    # Add mean text
+    # plt.text(mean_all_differences + 0.1, 0, f"Mean of all differences: {mean_all_differences}", verticalalignment='right')
+
+    plt.axhline(y=ci_upper, color='k', linestyle='--', linewidth=1)  # Add a horizontal line at the upper confidence interval
+    plt.axhline(y=ci_lower, color='k', linestyle='--', linewidth=1)  # Add a horizontal line at the lower confidence interval
+
+    plt.title(f'Tukey Mean-Difference Plot of {freq_band} power in the maximal {channel_group} channels')
+    
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.show()
+
+    io_externalized.save_fig_png_and_svg(figure=fig, 
+                                         filename=f"Tukey_Mean_Difference_Plot_20sec_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}_z_score_{z_score}",
+                                         path=GROUP_FIGURES_PATH)
+
+    return mean_all_differences, ci_upper, ci_lower, sample_size, patient_ids
+
+
+######### SPATIAL DISTRIBUTION OF POWER #########
+
+def rank_20sec_power_channels(filtered:str, freq_band:str, channel_group:str, rank_of_interest:int):
+    """
+    1) This function ranks the 20 sec power spectra for each subject and hemisphere within a selected group of channels
+    2) This function selects the channels wiht a specific power rank in the 2min power spectrum
+    
+    """
+
+    ranked_power_20sec = pd.DataFrame()
+    only_one_2min_rank_data = pd.DataFrame()
+
+    # load data
+    all_power_data = rank_power_2min(filtered=filtered, freq_band=freq_band, channel_group=channel_group)["ranked_power_2min"]
+
+    # rank average power of each 20 sec recording within the group of channels
+    sub_list = all_power_data["subject"].unique() # list of subjects
+
+    for sub in sub_list:
+
+        sub_data = all_power_data[all_power_data["subject"] == sub]
+
+        for hem in HEMISPHERES:
+
+            hem_data = sub_data[sub_data["hemisphere"] == hem]
+            hem_data_copy = hem_data.copy()
+
+            # rank power of each 20 sec recording
+            for i in range(1, 6):
+                hem_data_copy[f"rank_20sec_{i}"] = hem_data_copy[f"power_spectrum_20sec_{i}_mean"].rank(ascending=False)
+            
+            ranked_power_20sec = pd.concat([ranked_power_20sec, hem_data_copy], ignore_index=True)
+
+            # only keep maximal power channel
+            rank_2min_power_channel = ranked_power_20sec[ranked_power_20sec["rank_2min"] == rank_of_interest]
+            only_one_2min_rank_data = pd.concat([only_one_2min_rank_data, rank_2min_power_channel], ignore_index=True)
+    
+
+    return {
+        "all_ranked_power_20sec": ranked_power_20sec,
+        "only_one_2min_rank_data": only_one_2min_rank_data,}
+
+
+
+def tukey_mean_difference_plot_20sec_ranks(filtered:str, freq_band:str, channel_group:str, z_score:str, rank_of_interest:int):
+    """
+    For each patient hemisphere, one power channel with the specific 2min power rank:
+    Calculate the MEAN and DIFFERENCE TO MEAN of 5 x 20 sec power spectra within each patient hemisphere
+
+    Input:
+        - filtered: str "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
+        - freq_band: str "beta", "high_beta", "low_beta"
+        - channel_group: str "all", "ring", "segm_inter", "segm_intra", "segm"
+        - z_score: str "yes", "no"
+        - rank_of_interest: int 1-12 (depending on the number of channels in the group)
+
+    """
+    all_differences_to_group_mean = []
+
+    fig = plt.figure(figsize=(10, 10), layout='tight')
+    plt.subplot(1,1,1)
+
+    # load the maximal power data for each sub, hem
+    ranks_of_20sec_channels = rank_20sec_power_channels(filtered=filtered, 
+                                                        freq_band=freq_band, 
+                                                        channel_group=channel_group, 
+                                                        rank_of_interest=rank_of_interest)["only_one_2min_rank_data"]
+
+    # merge together columns "subject", "hemisphere", "channel" to get unique patient ids
+    ranks_of_20sec_channels["patient_id"] = ranks_of_20sec_channels["subject"] + "_" + ranks_of_20sec_channels["hemisphere"] + "_" + ranks_of_20sec_channels["channel"]
+    patient_ids = ranks_of_20sec_channels['patient_id'].unique()
+
+    for patient_id in patient_ids:
+        patient_data = ranks_of_20sec_channels[ranks_of_20sec_channels['patient_id'] == patient_id]
+        
+        measurements = []
+        for i in range(1, 6): # 5 x 20 sec power averages
+            column_name = f'rank_20sec_{i}'
+            measurements.append(patient_data[column_name].values[0])
+
+        if z_score == "yes":
+            z_score_data = calculate_z_score(measurements=measurements)
+            measurements = z_score_data["z_score"] # list of z-scores for each measurement
+        
+        # calculate mean and difference to mean
+        mean_of_measurements = np.mean(measurements)
+        difference_to_mean = [x - mean_of_measurements for x in measurements]
+
+        all_differences_to_group_mean.extend(difference_to_mean) 
+
+        # add a little bit of jitter, so that the points do not overlap
+        jitter_amount = 0.15
+        x_jittered = [mean_of_measurements + np.random.uniform(-jitter_amount, jitter_amount)] # mean here is often the same rank e.g. 1, so adding jitter helps to visualize the data      
+
+        # plot the group mean (x-axis) and the difference to the group mean (y-axis) of the same patient with the same color
+        plt.plot([x_jittered]*5, difference_to_mean, 'o', linestyle='-', label=patient_id, alpha=0.5)
+
+        # plt.plot([0, len(difference_to_mean)-1], [np.mean(difference_to_mean), np.mean(difference_to_mean)], linestyle='--', color='grey', alpha=0.5)
+    
+    # calculate the mean of all differences to group mean
+    mean_all_differences = np.mean(all_differences_to_group_mean)
+    ci_upper = mean_all_differences + 1.96 * np.std(all_differences_to_group_mean)
+    ci_lower = mean_all_differences - 1.96 * np.std(all_differences_to_group_mean)
+
+    sample_size = len(patient_ids)
+
+    # Plot the Tukey mean-difference plot
+    if z_score == "yes":
+        plt.xlabel(f'Group Mean (z-score), (rank within {channel_group} group)')
+        plt.ylabel('Difference to Group Mean (z-score)')
+    else:
+        plt.xlabel(f'Group Mean (rank within {channel_group} group)')
+        plt.ylabel(f'Difference to Group Mean')
+    
+    plt.grid(True)
+    plt.axhline(y=mean_all_differences, color='r', linestyle='--', linewidth=2)  # Add a horizontal line at the mean of all differences
+    # Add mean text
+    # plt.text(mean_all_differences + 0.1, 0, f"Mean of all differences: {mean_all_differences}", verticalalignment='right')
+
+    plt.axhline(y=ci_upper, color='k', linestyle='--', linewidth=1)  # Add a horizontal line at the upper confidence interval
+    plt.axhline(y=ci_lower, color='k', linestyle='--', linewidth=1)  # Add a horizontal line at the lower confidence interval
+
+    plt.title(f'Tukey Mean-Difference Plot of 20 sec {freq_band} power ranks within the {channel_group} group\n'
+              f'of one channel per hemisphere with 2min {freq_band} rank: {rank_of_interest}')
+    
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.show()
+
+    io_externalized.save_fig_png_and_svg(figure=fig, 
+                                         filename=f"Tukey_Mean_Difference_Plot_20sec_externalized_BSSU_ranks_{freq_band}_{channel_group}_{filtered}_z_score_{z_score}_of_2min_channel_rank_{rank_of_interest}",
+                                         path=GROUP_FIGURES_PATH)
+
+    return mean_all_differences, ci_upper, ci_lower, sample_size, patient_ids
+
+
+
+
 
