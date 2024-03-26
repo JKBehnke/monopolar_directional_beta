@@ -1977,7 +1977,7 @@ def calculate_periodic_beta_power(
 
         # cluster values into 3 categories: <40%, 40-70% and >70%
         stn_data_copy["beta_cluster"] = stn_data_copy["beta_relative_to_max"].apply(
-            helpers.assign_cluster
+            io_externalized.assign_cluster
         )
 
         # save to the beta rank dataframe
