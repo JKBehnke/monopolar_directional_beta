@@ -1122,7 +1122,7 @@ def fourier_transform_to_psd_re_ref_externalized(
         )
         fig_title = f"{new_reference} re-referenced externalized LFP"
 
-        if new_reference == "BSSU":
+        if new_reference == "bssu":
             fname_extension = "BSSU_"
         elif new_reference == "one_to_zero_two_to_three":
             fname_extension = "one_to_zero_two_to_three_"

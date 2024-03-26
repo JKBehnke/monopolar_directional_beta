@@ -183,3 +183,4 @@ def fourier_transform_to_psd(sfreq: int, lfp_data: np.ndarray):
         "std_Zxx": std_Zxx,
         "sem_Zxx": sem_Zxx,
     }
+

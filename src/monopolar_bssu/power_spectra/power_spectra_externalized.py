@@ -59,6 +59,12 @@ FILENAME_DICT = {
     "externalized_bssu_monopolar": "",
 }
 
+FILTER = {
+    "notch_and_band_pass_filtered": "filtered_lfp_250Hz",
+    "unfiltered": "lfp_resampled_250Hz",
+    "only_high_pass_filtered": "only_high_pass_lfp_250Hz",
+}
+
 
 def get_bids_id_from_sub_hem(subject_hemisphere: str):
     # get BIDS_IDs
@@ -166,6 +172,7 @@ def plot_power_spectra_monopolar(method: str, fooof: str, only_directional: str)
 def plot_power_spectra_20sec_externalized_bssu(sub_hem:str, chan:str, fourier_transform_2min, chunks:dict):
     """
     
+    Watch out: fourier transform for 20 sec chunks with 50% overlap 
     """
     # figure layout for one subject hemisphere
     fig = plt.figure(figsize=(20, 20), layout="tight")
@@ -197,6 +204,12 @@ def plot_power_spectra_20sec_externalized_bssu(sub_hem:str, chan:str, fourier_tr
     )
 
     for c in chunks.keys():
+
+        # check if array empty when the recording was too short, too much artifact cleaning
+        if len(chunks[c]) == 0:
+            print(f"Chunk {c} of {sub_hem}, {chan} is empty")
+            continue
+
         fourier_transform_chunk = (
             externalized_lfp_preprocessing.fourier_transform_to_psd(
                 sfreq=250, lfp_data=chunks[c]
@@ -234,10 +247,11 @@ def plot_power_spectra_20sec_externalized_bssu(sub_hem:str, chan:str, fourier_tr
 
 
 
-def bssu_externalized_power_spectra_20sec(incl_sub:list):
+def bssu_externalized_power_spectra_20sec(incl_sub:list, filtered:str):
     """
     Input:
         - incl_sub: list e.g. ["noBIDS24"]
+        - filtered: str, "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
 
     Data:
         - externalized data re-referenced to BSSU
@@ -254,6 +268,8 @@ def bssu_externalized_power_spectra_20sec(incl_sub:list):
 
 
     """
+
+    filter_name = FILTER[filtered]
 
     # load the BSSU externalized data
     extern_bssu_data = io_externalized.load_externalized_pickle(
@@ -293,7 +309,7 @@ def bssu_externalized_power_spectra_20sec(incl_sub:list):
                 chan_data = hem_data.loc[hem_data.bipolar_channel == chan]
 
                 # get the fitered time series
-                filtered_time_series = chan_data["filtered_lfp_250Hz"].values[0]
+                filtered_time_series = chan_data[filter_name].values[0]
 
                 # fourier transform of the 2 min time series
                 fourier_transform_2min = (
@@ -315,7 +331,7 @@ def bssu_externalized_power_spectra_20sec(incl_sub:list):
                 # save figure
                 io_externalized.save_fig_png_and_svg(
                     path=figures_path,
-                    filename=f"power_spectra_BSSU_externalized_20sec_{sub_hem}_{chan}",
+                    filename=f"power_spectra_BSSU_externalized_20sec_{sub_hem}_{chan}_{filtered}",
                     figure=figure,
                 )
 
@@ -326,6 +342,7 @@ def bssu_externalized_power_spectra_20sec(incl_sub:list):
                     "channel": [chan],
                     "chunks": [chunks],
                     "fourier_transform_2min": [fourier_transform_2min],
+                    "filtered": [filtered],
                 }
 
                 sub_result_df_single = pd.DataFrame(sub_result)
@@ -333,18 +350,19 @@ def bssu_externalized_power_spectra_20sec(incl_sub:list):
         
         # save subject result
         io_externalized.save_sub_result_as_pickle(data=sub_result_df, 
-                                                  filename="power_spectra_BSSU_externalized_20sec",
+                                                  filename=f"power_spectra_BSSU_externalized_20sec_{filtered}",
                                                   results_path=results_path)
 
     return sub_result_df
 
 
-def group_20sec_power_spectra_externalized_bssu(incl_bids_id: list):
+def group_20sec_power_spectra_externalized_bssu(incl_bids_id: list, filtered:str):
     """
     Reads all "power_spectra_BSSU_externalized_20sec" files from the results folder and groups them together
     
     Input:
         - incl_sub: list e.g. ["L003", "noBIDS24"]
+        - filtered: str, "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
 
     """
     group_20sec_dataframe = pd.DataFrame()  # empty dataframe
@@ -363,14 +381,14 @@ def group_20sec_power_spectra_externalized_bssu(incl_bids_id: list):
         )
 
         # check if file exists
-        if os.path.exists(os.path.join(results_path, "power_spectra_BSSU_externalized_20sec.pickle")) == False:
+        if os.path.exists(os.path.join(results_path, f"power_spectra_BSSU_externalized_20sec_{filtered}.pickle")) == False:
             print(f"No data for {bids_id}")
             continue
 
         # load the data
         sub_result_df = io_externalized.load_sub_result_pickle(
             bids_id=bids_id,
-            filename="power_spectra_BSSU_externalized_20sec"
+            filename=f"power_spectra_BSSU_externalized_20sec_{filtered}",
         )
 
         # add subject to the dataframe
@@ -383,7 +401,7 @@ def group_20sec_power_spectra_externalized_bssu(incl_bids_id: list):
         )
 
     # save as pickle
-    io_externalized.save_result_dataframe_as_pickle(data=group_20sec_dataframe,filename="power_spectra_BSSU_externalized_20sec_group")
+    io_externalized.save_result_dataframe_as_pickle(data=group_20sec_dataframe,filename=f"power_spectra_BSSU_externalized_20sec_group_{filtered}")
 
     return group_20sec_dataframe
 
