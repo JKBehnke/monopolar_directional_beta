@@ -122,6 +122,42 @@ def cut_lfp_in_20_sec_chunks(time_series: np.ndarray):
 
     return result_dict
 
+def cut_lfp_in_short_epochs(time_series: np.ndarray, fourier_transform:str):
+    """
+    Input:
+        - time_series: LFP data of one channel, sfreq 250 Hz, 2 min recording (30000 samples)
+        - fourier_transform: "yes" or "no"
+
+    Cut the LFP data into 
+        - 2 chunks á 8750 samples = 35 sec
+        - 3 chunks á 7500 samples = 30 sec
+        - 4 chunks á 6250 samples = 25 sec
+        - 5 chunks á 5000 samples = 20 sec
+        - 5 chunks á 3750 samples = 15 sec
+        - 5 chunks á 2500 samples = 10 sec
+        - 5 chunks á 1250 samples = 5 sec
+    """
+
+    seconds_list = [35, 30, 25, 20, 15, 10, 5]
+    samples_per_chunk = [sec * 250 for sec in seconds_list] # number of samles to get the desired seconds
+    result_dict = {}
+
+    for s, sec in enumerate(seconds_list):
+        n_samples = samples_per_chunk[s]    
+        n_chunks = int(len(time_series) / n_samples)
+
+        for i in range(1, n_chunks + 1):
+            start_index = (i - 1) * n_samples
+            end_index = i * n_samples
+            result_dict[f"power_spectrum_{sec}_sec_{i}"] = time_series[start_index:end_index]
+    
+    if fourier_transform == "yes":
+        for key, value in result_dict.items():
+            result_dict[key] = fourier_transform_to_psd(sfreq=250, lfp_data=value)["average_Zxx"]
+    
+    return result_dict # dictionary with keys: 35_sec_1, 35_sec_2, 30_sec_1, 30_sec_2, 30_sec_3, ...
+    
+
 
 def fourier_transform_to_psd(sfreq: int, lfp_data: np.ndarray):
     """

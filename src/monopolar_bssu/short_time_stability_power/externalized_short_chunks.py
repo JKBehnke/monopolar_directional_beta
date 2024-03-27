@@ -81,18 +81,184 @@ FILTER = {
     "only_high_pass_filtered": "only_high_pass_lfp_250Hz",
 }
 
-SPECTRA_LIST = ["power_spectrum_2min", 
-                "power_spectrum_20sec_1", 
-                "power_spectrum_20sec_2", 
-                "power_spectrum_20sec_3", 
-                "power_spectrum_20sec_4", 
-                "power_spectrum_20sec_5"]
+SECONDS_LIST = [35, 30, 25, 20, 15, 10, 5]
+
+SPECTRA_LIST = ["power_spectrum_2_min", 
+                "power_spectrum_20_sec_1", 
+                "power_spectrum_20_sec_2", 
+                "power_spectrum_20_sec_3", 
+                "power_spectrum_20_sec_4", 
+                "power_spectrum_20_sec_5"]
 
 FREQ_BAND_LIST = ["beta", "high_beta", "low_beta"]
 
 
 # Data: io_externalized.load_externalized_pickle(filename="power_spectra_BSSU_externalized_20sec_group_notch_and_band_pass_filtered")
 # column "chunks": each row (sub, hem, channel) with dictionary keys 1-6, values are time series of 20 seconds (5000 values)
+
+def exclude_patients():
+    """
+    Exclude patients with bad recordings
+        - 069_Left: recording too short because too many artifacts were taken out
+    """
+
+    exclude_sub_hem = ["069_Left"] 
+
+    return exclude_sub_hem
+
+def load_2min_and_short_epochs_power_spectra(incl_sub:list, filtered:str, sec_per_epoch:int):
+    """
+    This function cuts the 2min time series of externalized BSSU data into short epochs
+
+    Output: 
+        - dataframe with 2 min power spectra and power spectra of short epochs of the given seconds per epoch
+
+    """
+    filter_name = FILTER[filtered]
+
+    # load the BSSU externalized data
+    extern_bssu_data = io_externalized.load_externalized_pickle(
+        filename="externalized_directional_bssu_channels",
+        reference="bipolar_to_lowermost",
+    )
+
+    short_epochs_results_df = pd.DataFrame()
+    
+    if incl_sub == ["all"]:
+        bids_id_unique = list(extern_bssu_data["BIDS_id"].unique())
+    
+    else:
+        bids_id_unique = []
+        for sub in incl_sub:
+            sub_bids_id = sub_recordings_dict.get_bids_id_from_sub(sub)
+            bids_id_unique.append(sub_bids_id)
+    
+    for bids_id in bids_id_unique:
+        sub_data = extern_bssu_data[extern_bssu_data["BIDS_id"] == bids_id]
+        sub = sub_recordings_dict.get_sub_from_bids_id(bids_id)
+        
+        for hem in HEMISPHERES:
+            hem_data = sub_data[sub_data["hemisphere"] == hem]
+            
+            for ch in BSSU_CHANNELS:
+                chan_data = hem_data[hem_data["bipolar_channel"] == ch]
+                
+                # get the 2 min time series
+                time_series_2min = chan_data[filter_name].values[0]
+
+                # fourier transform
+                fourier_transform_2min = externalized_lfp_preprocessing.fourier_transform_to_psd(
+                    sfreq=250, 
+                    lfp_data=time_series_2min)
+                
+                power_spectrum_2min = fourier_transform_2min["average_Zxx"]
+                frequencies = fourier_transform_2min["frequencies"]
+                
+                # cut 2 min time series in multiple short epochs
+                short_epochs_all = externalized_lfp_preprocessing.cut_lfp_in_short_epochs(time_series=time_series_2min, fourier_transform="yes")
+                # dictionary with keys: 35_sec_1, 35_sec_2, 30_sec_1, 30_sec_2, 30_sec_3, ... 
+                # and values are the power spectra
+
+                # save the data
+                sub_results = {
+                    "bids_id": [bids_id],
+                    "subject": [sub],
+                    "hemisphere": [hem],
+                    "channel": [ch],
+                    "power_spectrum_2_min": [power_spectrum_2min],
+                    "frequencies": [frequencies],
+                    }
+                
+                # only keep the epochs of interest
+                for key, value in short_epochs_all.items():
+
+                    if f"power_spectrum_{str(sec_per_epoch)}_sec" in key:
+                        sub_results[f"{key}"] = [value]
+                
+
+                # save the data in dataframe
+                sub_results_df = pd.DataFrame(sub_results)
+                short_epochs_results_df = pd.concat([short_epochs_results_df, sub_results_df], ignore_index=True)
+    
+    # save the dataframe as pickle
+    io_externalized.save_result_dataframe_as_pickle(data=short_epochs_results_df, 
+                                             filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+    
+    return short_epochs_results_df
+
+
+def  choose_epochs(filtered:str, sec_per_epoch:int):
+    """
+    1. Check the number of epochs for each subject, hemisphere, channel
+    2. depending on the number of epochs, choose which epochs to include in the analysis
+    - if > 4 epochs: choose only 4 epochs, evenly distributed
+    """
+
+    data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+
+    short_power_spectra_columns = []
+
+    for column in data.columns:
+        if "power_spectrum" and "sec" in column:
+            short_power_spectra_columns.append(column)
+
+    number_epochs = len(short_power_spectra_columns)     
+
+    if number_epochs < 4:
+        print(f"Number of epochs too small for {sec_per_epoch}: {number_epochs}")  
+        columns_to_include = []
+
+    elif number_epochs == 4:
+        columns_to_include = short_power_spectra_columns     
+    
+    elif number_epochs > 4:
+        columns_to_include = []
+
+        # choose 4 epochs evenly distributed, with the condition that all chosen columns do not contain NaN values
+        # first check which column data does not contain NaN values
+        columns_without_nan = []
+        for col in short_power_spectra_columns:
+            if data[col].isnull().values.any() == False:
+                columns_without_nan.append(col)
+        
+        # check again if now the number of columns without NaN values is > 4
+        if len(columns_without_nan) < 4:
+            print(f"Number of columns without NaN values too small for {sec_per_epoch}: {len(columns_without_nan)}")
+            columns_to_include = []
+
+        elif len(columns_without_nan) == 4:
+            columns_to_include = columns_without_nan
+        
+        else:
+            step = len(columns_without_nan) // 4 # double slash for integer division
+            for i in range(1, 5):
+                index = int(i * step)
+
+                if index == len(columns_without_nan):
+                    index = index - 1
+                    
+                columns_to_include.append(columns_without_nan[index])
+    
+    # get the last integer of each column name in the columns to include
+    if len(columns_to_include) > 0:
+        sub_strings = [col.split("_")[-1] for col in columns_to_include]
+    else:
+        sub_strings = []
+    
+    # only keep the columns to include and check if there are now NaN values
+    kept_data = data[["subject", "hemisphere", "channel"] + columns_to_include]
+    if kept_data.isnull().values.any():
+        print(f"Kept data contains NaN values")
+
+
+    return {
+        "columns_to_include": columns_to_include,
+        "number_epochs": number_epochs,
+        "sub_strings": sub_strings,
+        "kept_data": kept_data
+        }
+
+
 
 
 def load_20sec_time_series(filtered:str):
@@ -196,7 +362,7 @@ def reorganize_data(filtered:str):
     return dataframe_all_power_spectra
 
 
-def caculate_freq_band_mean_sd(power_spectrum=None, frequencies=None):
+def calculate_freq_band_mean_sd(power_spectrum=None, frequencies=None):
     """
     Calculate mean and standard deviation of power in frequency bands
         - beta power (13-30 Hz)
@@ -237,7 +403,7 @@ def caculate_freq_band_mean_sd(power_spectrum=None, frequencies=None):
 
 
 
-def frequency_band_mean_sd(filtered:str):
+def frequency_band_mean_sd(filtered:str, sec_per_epoch:int):
     """
     From all power spectra, get:
         - beta power (13-30 Hz) mean ± SD
@@ -251,7 +417,13 @@ def frequency_band_mean_sd(filtered:str):
     """
 
     # load data
-    power_spectra_data = reorganize_data(filtered=filtered)
+    #power_spectra_data = load_2min_and_short_epochs_power_spectra(incl_sub=["all"], filtered=filtered, sec_per_epoch=sec_per_epoch)
+    power_spectra_data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+    
+    # get info how which epochs to include
+    epochs_info = choose_epochs(filtered=filtered, sec_per_epoch=sec_per_epoch)
+    columns_to_include = epochs_info["columns_to_include"]
+    all_columns_with_2min = ["power_spectrum_2_min"] + columns_to_include
 
     # get beta power mean ± SD
     beta_band_result = pd.DataFrame()
@@ -270,6 +442,10 @@ def frequency_band_mean_sd(filtered:str):
 
             hem_data = sub_data[sub_data["hemisphere"] == hem]
 
+            # exclude patient hemispheres if necessary
+            if f"{sub}_{hem}" in exclude_patients():
+                continue
+
             for ch in BSSU_CHANNELS:
 
                 chan_data = hem_data[hem_data["channel"] == ch]
@@ -279,11 +455,14 @@ def frequency_band_mean_sd(filtered:str):
                 # get freq band power mean ± SD
                 result_dictionary_per_row = {}
 
-                for s, spectrum in enumerate(SPECTRA_LIST):
+                for s, spectrum in enumerate(all_columns_with_2min):
 
                     power_spectrum = chan_data[spectrum].values[0]
 
-                    power_result_dict = caculate_freq_band_mean_sd(power_spectrum=power_spectrum, frequencies=frequencies)
+                    if type(power_spectrum) == float:
+                        print(f"Power spectrum {spectrum} of {sub} {hem} {ch} is a float!: {power_spectrum}")
+
+                    power_result_dict = calculate_freq_band_mean_sd(power_spectrum=power_spectrum, frequencies=frequencies)
 
                     result_dictionary_per_row[s] = power_result_dict
 
@@ -300,19 +479,16 @@ def frequency_band_mean_sd(filtered:str):
                         "power_spectrum_20sec_2": [result_dictionary_per_row[2][f"{freq}_power"]],
                         "power_spectrum_20sec_3": [result_dictionary_per_row[3][f"{freq}_power"]],
                         "power_spectrum_20sec_4": [result_dictionary_per_row[4][f"{freq}_power"]],
-                        "power_spectrum_20sec_5": [result_dictionary_per_row[5][f"{freq}_power"]],
                         "power_spectrum_2min_mean": [result_dictionary_per_row[0][f"{freq}_power_mean"]],
                         "power_spectrum_20sec_1_mean": [result_dictionary_per_row[1][f"{freq}_power_mean"]],
                         "power_spectrum_20sec_2_mean": [result_dictionary_per_row[2][f"{freq}_power_mean"]],
                         "power_spectrum_20sec_3_mean": [result_dictionary_per_row[3][f"{freq}_power_mean"]],
                         "power_spectrum_20sec_4_mean": [result_dictionary_per_row[4][f"{freq}_power_mean"]],
-                        "power_spectrum_20sec_5_mean": [result_dictionary_per_row[5][f"{freq}_power_mean"]],
                         "power_spectrum_2min_sd": [result_dictionary_per_row[0][f"{freq}_power_sd"]],
                         "power_spectrum_20sec_1_sd": [result_dictionary_per_row[1][f"{freq}_power_sd"]],
                         "power_spectrum_20sec_2_sd": [result_dictionary_per_row[2][f"{freq}_power_sd"]],
                         "power_spectrum_20sec_3_sd": [result_dictionary_per_row[3][f"{freq}_power_sd"]],
                         "power_spectrum_20sec_4_sd": [result_dictionary_per_row[4][f"{freq}_power_sd"]],
-                        "power_spectrum_20sec_5_sd": [result_dictionary_per_row[5][f"{freq}_power_sd"]],
                     }
 
                     one_row_dataframe = pd.DataFrame(one_row_dict)
@@ -333,7 +509,7 @@ def frequency_band_mean_sd(filtered:str):
     }
 
 
-def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
+def rank_power_2min(filtered:str, freq_band:str, channel_group:str, sec_per_epoch:int):
     """
     This function ranks the 2min power for each subject and hemisphere
 
@@ -363,7 +539,7 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
     elif channel_group == "segm":
         channels = BSSU_SEGM_CHANNELS
 
-    freq_band_data_all = frequency_band_mean_sd(filtered=filtered)
+    freq_band_data_all = frequency_band_mean_sd(filtered=filtered, sec_per_epoch=sec_per_epoch)
 
     spec_freq_band_data = freq_band_data_all[f"{freq_band}_band_result"]
 
@@ -398,7 +574,154 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str):
 
 
 
-################### STATISTICAL TESTS #####################
+################### BETA VARIATION OF THE MAXIMAL BETA CHANNEL PER HEMISPHERE DURING 5X 20SEC #####################
+
+def calculate_coefficient_of_variation(filtered:str, freq_band:str, channel_group:str, sec_per_epoch:int):
+    """
+    For a selected maximal beta (2min) channel per subject hemisphere:
+    - Calculate the coefficient of variation of the 4 x 20 sec power averages 
+
+    """
+    cv_result = pd.DataFrame()
+
+    # load the maximal power data for each sub, hem
+    maximal_power_data = rank_power_2min(filtered=filtered, freq_band=freq_band, channel_group=channel_group, sec_per_epoch=sec_per_epoch)["maximal_power_data"]
+
+    # merge together columns "subject", "hemisphere", "channel" to get unique patient ids
+    maximal_power_data["patient_id"] = maximal_power_data["subject"] + "_" + maximal_power_data["hemisphere"] + "_" + maximal_power_data["channel"]
+    patient_ids = maximal_power_data['patient_id'].unique()
+
+    for patient_id in patient_ids:
+        patient_data = maximal_power_data[maximal_power_data['patient_id'] == patient_id]
+
+        measurements = [] # fill this list with the 4 x 20 sec power averages
+        for i in range(1, 5):
+            column_name = f'power_spectrum_20sec_{i}_mean' # power average within the freq band of interest
+            measurements.append(patient_data[column_name].values[0])
+        
+        # calculate the coefficient of variation
+        cv = (np.std(measurements) / np.mean(measurements)) * 100 # in percent
+        cv_result_dict = {
+            "patient_id": [patient_id],
+            "cv": [cv],
+            "length_of_power_spectra": [sec_per_epoch] # 20 seconds (list of 20 multiplied by the number of measurements 4)
+        }
+
+        cv_result_row = pd.DataFrame(cv_result_dict)
+        cv_result = pd.concat([cv_result, cv_result_row], ignore_index=True)
+    
+    return cv_result
+
+def plot_coefficient_of_variation(filtered:str, freq_band:str, channel_group:str, sec_per_epoch:int):
+    """
+    Plot the coefficient of variation of the 4 x 20 sec power averages of the maximal beta channel per hemisphere
+    as a violin plot
+    """
+
+    coefficient_variation_data = calculate_coefficient_of_variation(filtered=filtered, freq_band=freq_band, channel_group=channel_group, sec_per_epoch=sec_per_epoch)
+
+    # Plot the coefficient of variation
+    #fig = plt.figure(figsize=(10, 10), layout='tight')
+    #plt.subplot(1,1,1)
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    # add jitter to the x-coordinates
+    power_spectrum_length = coefficient_variation_data["length_of_power_spectra"].values # e.g. 20 seconds (* number of patients )
+    
+    #jitter = np.random.normal(0, 0.3, len(power_spectrum_length))
+    #x_jittered = power_spectrum_length + jitter
+
+    # Plotting the box plot
+    # plt.boxplot(coefficient_variation_data["cv"], 
+    #             vert=True, 
+    #             widths=0.2, 
+    #             patch_artist=True, 
+    #             boxprops=dict(facecolor='lightblue'),
+    #             positions=[power_spectrum_length[0]])
+    
+    # Plot a violin plot showing the distribution of the coefficient of variation, with the patient ids in different colors
+    plt.violinplot(coefficient_variation_data["cv"], 
+                   showmeans=True, 
+                   showextrema=True, 
+                   showmedians=True,
+                   positions=[power_spectrum_length[0]], # list of positions of the violins on the x axis
+                   widths=0.1,)
+    
+    # plot each dot for each patient in the violin plot
+    #colors = plt.cm.viridis(np.linspace(0, 2, len(coefficient_variation_data)))
+    #for i in range(len(coefficient_variation_data)):
+    plt.plot(power_spectrum_length, coefficient_variation_data["cv"], 'o', alpha=0.3, markersize=10, color="k") #color=colors[i]
+    
+    plt.xticks([sec_per_epoch], [f'{power_spectrum_length[0]} seconds']) # for violin plot
+                
+    # plt.bar(range(len(coefficient_variation_data["cv"])), coefficient_variation_data["cv"], color='skyblue')
+    plt.ylabel('Coefficient of Variation (%)')
+    plt.xlabel('Length of Power Spectra (seconds)')
+    plt.title(f'Coefficient of Variation of 4x {freq_band} power in the maximal {freq_band} {channel_group} channels')
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.show()
+
+    io_externalized.save_fig_png_and_svg(figure=fig,
+                                         filename=f"Coefficient_of_Variation_4x_{sec_per_epoch}sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}",
+                                         path=GROUP_FIGURES_PATH
+    )
+
+def plot_coefficient_of_variation_multiple_durations(filtered:str, freq_band:str, channel_group:str):
+    """
+    Plot the coefficient of variation of the 4 x short power averages of the maximal beta channel per hemisphere
+    as a violin plot
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    sec_per_epochs_list = [5, 10, 15, 20, 25]
+    
+    for epoch in sec_per_epochs_list:
+
+        coefficient_variation_data = calculate_coefficient_of_variation(filtered=filtered, freq_band=freq_band, channel_group=channel_group, sec_per_epoch=epoch)
+
+        power_spectrum_length = coefficient_variation_data["length_of_power_spectra"].values # e.g. 20 seconds (* number of patients )
+
+        # Plotting the box plot
+        plt.boxplot(coefficient_variation_data["cv"], 
+                    vert=True, 
+                    widths=1.0, 
+                    patch_artist=True, 
+                    boxprops=dict(facecolor='lightblue'),
+                    positions=[power_spectrum_length[0]])
+    
+        # Plot a violin plot showing the distribution of the coefficient of variation, with the patient ids in different colors
+        # plt.violinplot(coefficient_variation_data["cv"], 
+        #             showmeans=True, 
+        #             showextrema=True, 
+        #             showmedians=True,
+        #             positions=[power_spectrum_length[0]], # list of positions of the violins on the x axis
+        #             widths=0.7,)
+    
+        # plot each dot for each patient in the violin plot
+        plt.plot(power_spectrum_length, coefficient_variation_data["cv"], 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
+        
+    #plt.xticks(sec_per_epochs_list, [f'{power_spectrum_length[0]} seconds']) # for violin plot
+    #plt.xticks(sec_per_epochs_list, [f'{sec_per_epochs_list} seconds']) # for violin plot
+    ax.set_xticks(sec_per_epochs_list)
+    ax.set_xticklabels(sec_per_epochs_list)
+                
+    # plt.bar(range(len(coefficient_variation_data["cv"])), coefficient_variation_data["cv"], color='skyblue')
+    plt.ylabel('Coefficient of Variation (%)')
+    plt.xlabel('Length of Power Spectra (seconds)')
+    plt.title(f'Coefficient of Variation of 4x {freq_band} power in the maximal {freq_band} {channel_group} channels')
+    
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.show()
+
+    io_externalized.save_fig_png_and_svg(figure=fig,
+                                         filename=f"Coefficient_of_Variation_4x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}",
+                                         path=GROUP_FIGURES_PATH
+    )
+
+
 
 def shapiro_wilk_means_distribution(filtered:str, freq_band:str, channel_group:str):
     """
