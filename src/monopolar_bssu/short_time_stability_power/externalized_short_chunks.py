@@ -572,6 +572,49 @@ def rank_power_2min(filtered:str, freq_band:str, channel_group:str, sec_per_epoc
         "maximal_power_data": maximal_power_data,
         "maximal_power_patient_ids": patient_ids}
 
+def get_statistics(data_info:str, data=None):
+    """
+    Caculates statistical information of the data
+    Input:
+        - data_info: str, information about the data
+        - data: pd.Series, data to calculate statistics
+    """
+
+    # caculate Outliers
+    q25, q75 = np.percentile(data, [25, 75])
+    iqr = q75 - q25
+    threshold = 1.5 
+
+    lower_bound = q25 - threshold * iqr
+    upper_bound = q75 + threshold * iqr
+
+    outliers = data[(data < lower_bound) | (data > upper_bound)]
+    outliers_indices = outliers.index
+    outliers_values = outliers.values
+
+
+    stats_dict = {
+            "data_info": [data_info],
+            "sample_size": [len(data)],
+            "mean_cv": [np.mean(data)],
+            "std_cv": [np.std(data)],
+            "median_cv": [np.median(data)],
+            "outliers_indices": [outliers_indices],
+            "outliers_values": [outliers_values],
+            "n_outliers": [len(outliers)],
+            "min": [np.min(data)],
+            "max": [np.max(data)],
+            "25%": [q25],
+            "50%": [np.percentile(data, 50)],
+            "75%": [q75],
+        }
+    
+    stats_df = pd.DataFrame(stats_dict)
+
+    return stats_df
+
+
+
 
 
 ################### BETA VARIATION OF THE MAXIMAL BETA CHANNEL PER HEMISPHERE DURING 5X 20SEC #####################
@@ -676,6 +719,7 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str, freq_band:str
     fig, ax = plt.subplots(figsize=(10, 10))
 
     sec_per_epochs_list = [5, 10, 15, 20, 25]
+    sample_size_and_infos = pd.DataFrame()
     
     for epoch in sec_per_epochs_list:
 
@@ -688,8 +732,16 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str, freq_band:str
                     vert=True, 
                     widths=1.0, 
                     patch_artist=True, 
-                    boxprops=dict(facecolor='lightblue'),
+                    showmeans=True,
+                    meanline=True,
+                    boxprops=dict(facecolor='white'),
                     positions=[power_spectrum_length[0]])
+        # orange line for the median
+        # green dotted line for the mean
+        
+        
+        # statistics = coefficient_variation_data["cv"].describe()
+        
     
         # Plot a violin plot showing the distribution of the coefficient of variation, with the patient ids in different colors
         # plt.violinplot(coefficient_variation_data["cv"], 
@@ -701,6 +753,27 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str, freq_band:str
     
         # plot each dot for each patient in the violin plot
         plt.plot(power_spectrum_length, coefficient_variation_data["cv"], 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
+
+        # epoch_info = {
+        #     "epoch": [epoch],
+        #     "sample_size": [len(coefficient_variation_data)],
+        #     "mean_cv": [np.mean(coefficient_variation_data["cv"])],
+        #     "std_cv": [np.std(coefficient_variation_data["cv"])],
+        #     "median_cv": [np.median(coefficient_variation_data["cv"])],
+            
+        #     "statistics": [statistics],
+        # }
+        # epoch_info_df = pd.DataFrame(epoch_info)
+
+        statistics_info = get_statistics(data_info=str(epoch), data=coefficient_variation_data["cv"])
+
+        # get the outlier indices
+        outlier_indices = statistics_info["outliers_indices"].values[0]
+        outlier_patient_ids = coefficient_variation_data["patient_id"].iloc[outlier_indices].values
+        outlier_values = coefficient_variation_data["cv"].iloc[outlier_indices].values
+        statistics_info["outlier_patient_ids"] = [outlier_patient_ids]
+
+        sample_size_and_infos = pd.concat([sample_size_and_infos, statistics_info], ignore_index=True)
         
     #plt.xticks(sec_per_epochs_list, [f'{power_spectrum_length[0]} seconds']) # for violin plot
     #plt.xticks(sec_per_epochs_list, [f'{sec_per_epochs_list} seconds']) # for violin plot
@@ -720,6 +793,11 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str, freq_band:str
                                          filename=f"Coefficient_of_Variation_4x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}",
                                          path=GROUP_FIGURES_PATH
     )
+
+    return sample_size_and_infos
+
+
+
 
 
 
