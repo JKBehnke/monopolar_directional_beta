@@ -592,6 +592,13 @@ def get_statistics(data_info:str, data=None):
     outliers_indices = outliers.index
     outliers_values = outliers.values
 
+    # calculate shapiro wilk test
+    stat, p = shapiro(np.array(data))
+
+    if p > 0.05:
+        print(f'Data is normally distributed (p={p})')
+    else:
+        print(f'Data is not normally distributed (p={p})')
 
     stats_dict = {
             "data_info": [data_info],
@@ -607,6 +614,9 @@ def get_statistics(data_info:str, data=None):
             "25%": [q25],
             "50%": [np.percentile(data, 50)],
             "75%": [q75],
+            "shapiro_wilk_stat": [stat],
+            "shapiro_wilk_p": [p],
+            "normal_distribution": [p > 0.05],
         }
     
     stats_df = pd.DataFrame(stats_dict)
