@@ -156,6 +156,59 @@ def cut_lfp_in_short_epochs(time_series: np.ndarray, fourier_transform:str):
             result_dict[key] = fourier_transform_to_psd(sfreq=250, lfp_data=value)["average_Zxx"]
     
     return result_dict # dictionary with keys: 35_sec_1, 35_sec_2, 30_sec_1, 30_sec_2, 30_sec_3, ...
+
+def lfp_windows_2min(time_series: np.ndarray, seconds_per_epoch:int):
+    """
+    Input:
+        - time_series: LFP data of one channel, sfreq 250 Hz, 2 min recording (30000 samples)
+        - fourier_transform: "yes" or "no"
+        - seconds_per_epoch: int e.g. 20, if one epoch should be 20s long
+        - number_of_epochs: e.g. 30 -> will create 30 epochs, overlapping if necessary
+
+    Cut the LFP data into 30 epochs
+        - 8750 samples = 35 sec
+        - 7500 samples = 30 sec 
+        - 6250 samples = 25 sec -> 50% overlap = 8 epochs
+        - 5000 samples = 20 sec -> 50% overlap = 11 epochs, 1/20s resolution
+        - 3750 samples = 15 sec
+        - 2500 samples = 10 sec
+        - 1250 samples = 5 sec
+    """
+
+    window_length = seconds_per_epoch * 250 # number of samles to get the desired seconds
+
+    ######### short time fourier transform to calculate PSD #########
+    overlap = window_length // 2 # 50% overlap 
+
+    # Calculate the short-time Fourier transform (STFT) using Hann window
+    window = hann(window_length, sym=False)
+
+    frequencies, times, Zxx = scipy.signal.spectrogram(
+        time_series,
+        fs=250,
+        window=window,
+        noverlap=overlap,
+        scaling="density",
+        mode="psd",
+        axis=0,
+    )
+    # Frequencies: 0-125 Hz (1 Hz resolution), Nyquist fs/2) 
+    # -> bei 20sec window length und 50% overlap: 2501 frequencies bis 125 Hz
+    # times: len=161, 0, 0.75, 1.5 .... 120.75 (1 Hz resolution)
+    # Zxx: 126 arrays, each len=161
+
+    # average PSD across duration of the recording
+    average_Zxx = np.mean(Zxx, axis=1) # 2 min average
+    std_Zxx = np.std(Zxx, axis=1)
+    sem_Zxx = std_Zxx / np.sqrt(Zxx.shape[1])
+    number_of_all_epochs = Zxx.shape[1]
+
+    return {
+        "power_spectrum_2min": average_Zxx,
+        "Zxx_all": Zxx,
+        "frequencies": frequencies, 
+        "times": times, 
+        "number_of_all_epochs": number_of_all_epochs} # dictionary with keys: 35_sec_1, 35_sec_2, 30_sec_1, 30_sec_2, 30_sec_3, ...
     
 
 
