@@ -283,7 +283,7 @@ def load_externalized_pickle(filename: str, fooof_version=None, reference=None):
             "externalized_directional_bssu_channels",
             "fooof_externalized_group_BSSU_only_high_pass_filtered",
             "power_spectra_BSSU_externalized_20sec_group_{filtered}"
-            "power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec"
+            "power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec{number_epochs}epochs"
 
             ]
 

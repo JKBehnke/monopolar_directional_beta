@@ -11,6 +11,8 @@ import pandas as pd
 import scipy
 from fooof.plts.spectra import plot_spectrum
 from scipy.stats import shapiro
+from itertools import combinations
+from scipy.stats import wilcoxon, mannwhitneyu
 
 # internal Imports
 from ..utils import find_folders as find_folders
@@ -216,7 +218,7 @@ def load_2min_and_short_epochs_power_spectra(incl_sub:list, filtered:str, sec_pe
     
     # save the dataframe as pickle
     io_externalized.save_result_dataframe_as_pickle(data=short_epochs_results_df, 
-                                             filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+                                             filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec_{number_of_epochs}epochs")
     
     return short_epochs_results_df
 
@@ -224,7 +226,7 @@ def load_2min_and_short_epochs_power_spectra(incl_sub:list, filtered:str, sec_pe
 def get_epochs_data(filtered:str, sec_per_epoch:int, number_epochs:int):
     """
     """
-    data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+    data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec_{number_epochs}epochs")
 
     short_power_spectra_columns = []
     for column in data.columns:
@@ -250,6 +252,9 @@ def get_epochs_data(filtered:str, sec_per_epoch:int, number_epochs:int):
     elif len(columns_without_nan) == number_epochs:
         columns_to_include = columns_without_nan
     
+    else: 
+        columns_to_include = columns_without_nan[:number_epochs]
+    
     # only keep the columns to include and check if there are now NaN values
     kept_data = data[["subject", "hemisphere", "channel"] + columns_to_include]
     if kept_data.isnull().values.any():
@@ -261,21 +266,18 @@ def get_epochs_data(filtered:str, sec_per_epoch:int, number_epochs:int):
         "available_number_epochs": available_number_epochs,
         "kept_data": kept_data
         }
-    
-
-
-
-
 
 
 def choose_epochs(filtered:str, sec_per_epoch:int, number_epochs:int):
     """
+
+    OLD FUNCTION:
     1. Check the number of epochs for each subject, hemisphere, channel
     2. depending on the number of epochs, choose which epochs to include in the analysis
     - if number of existing epochs above the desired number of epochs: choose only the input number of epochs, evenly distributed
     """
 
-    data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+    data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec_{number_epochs}epochs")
 
     short_power_spectra_columns = []
 
@@ -499,7 +501,7 @@ def frequency_band_mean_sd(filtered:str, sec_per_epoch:int, number_epochs:int):
 
     # load data
     #power_spectra_data = load_2min_and_short_epochs_power_spectra(incl_sub=["all"], filtered=filtered, sec_per_epoch=sec_per_epoch)
-    power_spectra_data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec")
+    power_spectra_data = io_externalized.load_externalized_pickle(filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec_{number_epochs}epochs")
     
     # get info how which epochs to include
     epochs_info = get_epochs_data(filtered=filtered, sec_per_epoch=sec_per_epoch, number_epochs=number_epochs)
@@ -685,9 +687,18 @@ def get_statistics(data_info:str, data=None):
     lower_bound = q25 - threshold * iqr
     upper_bound = q75 + threshold * iqr
 
-    outliers = data[(data < lower_bound) | (data > upper_bound)]
-    outliers_indices = outliers.index
-    outliers_values = outliers.values
+    if type(data) == pd.Series:
+        outliers = data[(data < lower_bound) | (data > upper_bound)]
+        outliers_indices = outliers.index
+        outliers_values = outliers.values
+
+    elif type(data) == list:
+        outliers = [x for x in data if x < lower_bound or x > upper_bound]
+        outliers_indices = [i for i, x in enumerate(data) if x < lower_bound or x > upper_bound]
+        outliers_values = [x for x in data if x < lower_bound or x > upper_bound]
+
+    else: 
+        print("Data type not supported, must be pd.Series or list")
 
     # calculate shapiro wilk test
     stat, p = shapiro(np.array(data))
@@ -889,7 +900,7 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str,
     # plt.bar(range(len(coefficient_variation_data["cv"])), coefficient_variation_data["cv"], color='skyblue')
     plt.ylabel('Coefficient of Variation (%)')
     plt.xlabel('Length of Power Spectra (seconds)')
-    plt.title(f'Coefficient of Variation of 4x {freq_band} power in the maximal {freq_band} {channel_group} channels')
+    plt.title(f'Coefficient of Variation of {number_epochs}x {freq_band} power in the maximal {freq_band} {channel_group} channels')
     
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -903,6 +914,51 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str,
     return sample_size_and_infos
 
 
+def wilcoxon_signed_rank_test_between_CV(
+        filtered:str, 
+        freq_band:str, 
+        channel_group:str, 
+        sec_per_epochs_list:list, 
+        number_epochs:int
+):
+    """
+    """
+
+    data_list = {}
+    wilcoxon_results_df = pd.DataFrame()    
+
+    pairs = list(combinations(sec_per_epochs_list, 2)) # get all possible pairs of sec_per_epochs_list
+
+    
+    # get the data of each epoch length
+    for epoch in sec_per_epochs_list:
+
+        coefficient_variation_data = calculate_coefficient_of_variation(filtered=filtered, 
+                                                                        freq_band=freq_band, 
+                                                                        channel_group=channel_group, 
+                                                                        sec_per_epoch=epoch,
+                                                                        number_epochs=number_epochs)
+        
+        data_list[epoch] = coefficient_variation_data["cv"]
+    
+    # Wilcoxon Signed-Rank Test für jedes Paar durchführen
+    for pair in pairs:
+        group1_cv = pair[0]
+        group2_cv = pair[1]
+        statistic, p_value = wilcoxon(data_list[group1_cv], data_list[group2_cv])
+
+        wilcoxon_result = {
+            "epoch_length_1": [group1_cv],
+            "epoch_length_2": [group2_cv],
+            "statistic": [statistic],
+            "p_value": [p_value],
+            "significant": [p_value < 0.05]
+        }
+        
+        wilcoxon_single_pair = pd.DataFrame(wilcoxon_result)
+        wilcoxon_results_df = pd.concat([wilcoxon_results_df, wilcoxon_single_pair], ignore_index=True)
+    
+    return wilcoxon_results_df
 
 
 def shapiro_wilk_means_distribution(filtered:str, freq_band:str, channel_group:str):
@@ -1060,18 +1116,27 @@ def tukey_mean_difference_plot(filtered:str, freq_band:str, channel_group:str, z
 
 ######### SPATIAL DISTRIBUTION OF POWER #########
 
-def rank_20sec_power_channels(filtered:str, freq_band:str, channel_group:str, rank_of_interest:int):
+def rank_short_sec_power_channels(filtered:str, 
+                              freq_band:str, 
+                              channel_group:str, 
+                              rank_of_interest:int,
+                              sec_per_epoch:int,
+                              number_epochs:int):
     """
     1) This function ranks the 20 sec power spectra for each subject and hemisphere within a selected group of channels
     2) This function selects the channels wiht a specific power rank in the 2min power spectrum
     
     """
 
-    ranked_power_20sec = pd.DataFrame()
+    ranked_power_sec = pd.DataFrame()
     only_one_2min_rank_data = pd.DataFrame()
 
     # load data
-    all_power_data = rank_power_2min(filtered=filtered, freq_band=freq_band, channel_group=channel_group)["ranked_power_2min"]
+    all_power_data = rank_power_2min(filtered=filtered, 
+                                     freq_band=freq_band, 
+                                     channel_group=channel_group,
+                                     sec_per_epoch=sec_per_epoch,
+                                     number_epochs=number_epochs)["ranked_power_2min"]
 
     # rank average power of each 20 sec recording within the group of channels
     sub_list = all_power_data["subject"].unique() # list of subjects
@@ -1085,24 +1150,244 @@ def rank_20sec_power_channels(filtered:str, freq_band:str, channel_group:str, ra
             hem_data = sub_data[sub_data["hemisphere"] == hem]
             hem_data_copy = hem_data.copy()
 
-            # rank power of each 20 sec recording
-            for i in range(1, 6):
-                hem_data_copy[f"rank_20sec_{i}"] = hem_data_copy[f"power_spectrum_20sec_{i}_mean"].rank(ascending=False)
+            # rank power of each epoch recording
+            for i in range(1, number_epochs + 1):
+                hem_data_copy[f"rank_sec_{i}"] = hem_data_copy[f"power_spectrum_sec_{i}_mean"].rank(ascending=False)
             
-            ranked_power_20sec = pd.concat([ranked_power_20sec, hem_data_copy], ignore_index=True)
+            ranked_power_sec = pd.concat([ranked_power_sec, hem_data_copy], ignore_index=True)
 
             # only keep maximal power channel
-            rank_2min_power_channel = ranked_power_20sec[ranked_power_20sec["rank_2min"] == rank_of_interest]
+            rank_2min_power_channel = ranked_power_sec[ranked_power_sec["rank_2min"] == rank_of_interest]
             only_one_2min_rank_data = pd.concat([only_one_2min_rank_data, rank_2min_power_channel], ignore_index=True)
     
 
     return {
-        "all_ranked_power_20sec": ranked_power_20sec,
+        "all_ranked_power_sec": ranked_power_sec,
         "only_one_2min_rank_data": only_one_2min_rank_data,}
 
+def exclude_outliers(outlier_indices:list, data:list, patient_ids:list):
+    """
+    """
+
+    data_without_outliers = [x for i, x in enumerate(data) if i not in outlier_indices]
+    patient_ids_without_outliers = [patient_ids[i] for i in range(len(data)) if i not in outlier_indices]
+    sample_size = len(data_without_outliers)
+
+    return {
+        "data_without_outliers": data_without_outliers,
+        "patient_ids_without_outliers": patient_ids_without_outliers,
+        "sample_size": sample_size}
 
 
-def tukey_mean_difference_plot_20sec_ranks(filtered:str, freq_band:str, channel_group:str, z_score:str, rank_of_interest:int):
+def differences_to_mean_rank(filtered:str, 
+                            freq_band:str, 
+                            channel_group:str, 
+                            rank_of_interest:int,
+                            sec_per_epoch:list,
+                            number_epochs:int,
+                            group_or_2min_mean:str,
+                            plot_type:str):
+    """
+    Function to plot a violin plot of MEAN of differences to the mean rank of all short power spectra within each patient hemisphere
+    - For each patient hemisphere, one power channel with the specific 2min power rank:
+    - First calculate the difference of rank of each short epoch to the mean rank of all short epochs
+    - Then calculate the MEAN of all DIFFERENCES TO MEAN of all short power spectra within each patient hemisphere
+
+    Input:
+        - group_or_2min_mean: str "group", "2min"
+        - plot_type: str "violin", "boxplot"
+    """
+
+    sample_size_and_infos = pd.DataFrame()
+    all_data = {}
+
+    fig = plt.figure(figsize=(10, 10), layout='tight')
+    plt.subplot(1,1,1)
+
+    for epochs in sec_per_epoch:
+
+        all_differences_to_group_mean = []
+
+        # load the maximal power data for each sub, hem
+        ranks_of_sec_channels = rank_short_sec_power_channels(filtered=filtered, 
+                                                            freq_band=freq_band, 
+                                                            channel_group=channel_group, 
+                                                            rank_of_interest=rank_of_interest,
+                                                            sec_per_epoch=epochs,
+                                                            number_epochs=number_epochs)["only_one_2min_rank_data"]
+
+        # merge together columns "subject", "hemisphere", "channel" to get unique patient ids
+        ranks_of_sec_channels["patient_id"] = ranks_of_sec_channels["subject"] + "_" + ranks_of_sec_channels["hemisphere"] + "_" + ranks_of_sec_channels["channel"]
+        patient_ids = ranks_of_sec_channels['patient_id'].unique()
+
+        for patient_id in patient_ids:
+            patient_data = ranks_of_sec_channels[ranks_of_sec_channels['patient_id'] == patient_id]
+            
+            measurements = []
+            for i in range(1, number_epochs + 1): # multiple short power averages
+                column_name = f'rank_sec_{i}'
+                measurements.append(patient_data[column_name].values[0])
+
+            # choose if difference to mean of the group or the 2min power rank should be calculated
+            if group_or_2min_mean == "group":
+                mean = np.mean(measurements)
+            
+            elif group_or_2min_mean == "2min":
+                mean = rank_of_interest
+
+            difference_to_mean = [x - mean for x in measurements] # list of all differences to the mean rank
+
+            # add a little bit of jitter, so that the points do not overlap
+            # jitter_amount = 0.15
+            # x_jittered = [np.mean(difference_to_mean) + np.random.uniform(-jitter_amount, jitter_amount)] # mean here is often the same rank e.g. 1, so adding jitter helps to visualize the data      
+
+            all_differences_to_group_mean.append(np.mean(difference_to_mean)) # list of mean differences to the mean rank 
+
+        all_data[epochs] = all_differences_to_group_mean
+
+        # plot the violin plot of the mean differences to the mean rank
+        
+        if plot_type == "boxplot":
+            plt.boxplot(all_differences_to_group_mean, 
+                            vert=True, 
+                            widths=1.0, 
+                            patch_artist=True, 
+                            showmeans=True,
+                            meanline=True,
+                            boxprops=dict(facecolor='white'),
+                            positions=[epochs])
+            # orange line for the median
+            # green dotted line for the mean
+            
+
+        elif plot_type == "violinplot":
+            # Plot a violin plot showing the distribution of the coefficient of variation, with the patient ids in different colors
+            plt.violinplot(all_differences_to_group_mean, 
+                        showmeans=True, 
+                        showextrema=True, 
+                        showmedians=True,
+                        positions=[epochs], # list of positions of the violins on the x axis
+                        widths=0.7,)
+
+        # plot each dot for each patient in the violin plot
+        plt.plot([epochs]*len(all_differences_to_group_mean), all_differences_to_group_mean, 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
+
+        statistics_info = get_statistics(data_info=str(epochs), data=all_differences_to_group_mean)
+
+        # get the outlier indices
+        outlier_indices = statistics_info["outliers_indices"].values[0]
+        outlier_patient_ids = [patient_ids[i] for i in outlier_indices]
+        outlier_values = [all_differences_to_group_mean[i] for i in outlier_indices]
+        statistics_info["outlier_patient_ids"] = [outlier_patient_ids]
+        statistics_info["patient_ids"] = [patient_ids]
+
+        sample_size_and_infos = pd.concat([sample_size_and_infos, statistics_info], ignore_index=True)
+
+    # plt.bar(range(len(coefficient_variation_data["cv"])), coefficient_variation_data["cv"], color='skyblue')
+    plt.ylabel(f'Mean {freq_band} rank difference to {group_or_2min_mean} mean rank')
+    plt.xlabel('Window length of Power Spectra (seconds)')
+    plt.title(f'Mean rank difference to {group_or_2min_mean} rank of {number_epochs}x {freq_band} power epochs '+
+               f'\nin the maximal {freq_band} channels from {channel_group}')
+    
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.show()
+
+    io_externalized.save_fig_png_and_svg(figure=fig,
+                                         filename=f"Mean_rank_difference_to_rank{rank_of_interest}_of_{group_or_2min_mean}_{number_epochs}x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}_{plot_type}",
+                                         path=GROUP_FIGURES_PATH
+    )
+
+
+    return {
+        "all_differences_to_group_mean": all_data,
+        "sample_size_and_infos": sample_size_and_infos}
+
+
+def wilcoxon_signed_rank_test_between_diff_to_rank(
+        filtered:str, 
+        freq_band:str, 
+        channel_group:str, 
+        rank_of_interest:int,
+        sec_per_epochs_list:list, 
+        number_epochs:int,
+        group_or_2min_mean:str,
+        outliers_excluded:str
+):
+    """
+    """
+
+    wilcoxon_results_df = pd.DataFrame()    
+    sample_size = {}
+
+    pairs = list(combinations(sec_per_epochs_list, 2)) # get all possible pairs of sec_per_epochs_list
+
+    
+    # get the data of each epoch length
+
+    difference_to_rank_data = differences_to_mean_rank(filtered=filtered, 
+                                                        freq_band=freq_band, 
+                                                        channel_group=channel_group, 
+                                                        rank_of_interest=rank_of_interest,
+                                                        sec_per_epoch=sec_per_epochs_list,
+                                                        number_epochs=number_epochs,
+                                                        group_or_2min_mean=group_or_2min_mean,
+                                                        plot_type="boxplot")
+    
+    all_differences_to_group_mean = difference_to_rank_data["all_differences_to_group_mean"]
+        
+    # Wilcoxon Signed-Rank Test für jedes Paar durchführen
+    for pair in pairs:
+        group1 = pair[0]
+        group2 = pair[1]
+
+        # eclude outliers if wanted
+        if outliers_excluded == "yes":
+            data_info = difference_to_rank_data["sample_size_and_infos"]
+            group1_info = data_info[data_info["data_info"] == str(group1)]
+            group2_info = data_info[data_info["data_info"] == str(group2)]
+
+            data_to_test_group1 = exclude_outliers(outlier_indices=group1_info["outliers_indices"].values[0],
+                                                   data=all_differences_to_group_mean[group1],
+                                                    patient_ids=group1_info["patient_ids"].values[0])
+            
+            data_to_test_group2 = exclude_outliers(outlier_indices=group2_info["outliers_indices"].values[0],
+                                                    data=all_differences_to_group_mean[group2],
+                                                    patient_ids=group2_info["patient_ids"].values[0])
+            
+            # mann whitney test because different sample size
+            statistic, p_value = mannwhitneyu(data_to_test_group1["data_without_outliers"], data_to_test_group2["data_without_outliers"])
+            #statistic, p_value = wilcoxon(data_to_test_group1["data_without_outliers"], data_to_test_group2["data_without_outliers"])
+            sample_size[group1] = data_to_test_group1["sample_size"]
+            sample_size[group2] = data_to_test_group2["sample_size"]
+
+
+        elif outliers_excluded == "no":
+
+            statistic, p_value = wilcoxon(all_differences_to_group_mean[group1], all_differences_to_group_mean[group2])
+            sample_size[group1] = len(all_differences_to_group_mean[group1])
+            sample_size[group2] = len(all_differences_to_group_mean[group2])
+
+        wilcoxon_result = {
+            "epoch_length_1": [group1],
+            "epoch_length_2": [group2],
+            "statistic": [statistic],
+            "p_value": [p_value],
+            "significant": [p_value < 0.05],
+        }
+        
+        wilcoxon_single_pair = pd.DataFrame(wilcoxon_result)
+        wilcoxon_results_df = pd.concat([wilcoxon_results_df, wilcoxon_single_pair], ignore_index=True)
+    
+    return wilcoxon_results_df, sample_size
+
+def tukey_mean_difference_plot_20sec_ranks(filtered:str, 
+                                           freq_band:str, 
+                                           channel_group:str, 
+                                           z_score:str, 
+                                           rank_of_interest:int,
+                                           sec_per_epoch:int,
+                                           number_epochs:int):
     """
     For each patient hemisphere, one power channel with the specific 2min power rank:
     Calculate the MEAN and DIFFERENCE TO MEAN of 5 x 20 sec power spectra within each patient hemisphere
@@ -1121,10 +1406,12 @@ def tukey_mean_difference_plot_20sec_ranks(filtered:str, freq_band:str, channel_
     plt.subplot(1,1,1)
 
     # load the maximal power data for each sub, hem
-    ranks_of_20sec_channels = rank_20sec_power_channels(filtered=filtered, 
+    ranks_of_20sec_channels = rank_short_sec_power_channels(filtered=filtered, 
                                                         freq_band=freq_band, 
                                                         channel_group=channel_group, 
-                                                        rank_of_interest=rank_of_interest)["only_one_2min_rank_data"]
+                                                        rank_of_interest=rank_of_interest,
+                                                        sec_per_epoch=sec_per_epoch,
+                                                        number_epochs=number_epochs)["only_one_2min_rank_data"]
 
     # merge together columns "subject", "hemisphere", "channel" to get unique patient ids
     ranks_of_20sec_channels["patient_id"] = ranks_of_20sec_channels["subject"] + "_" + ranks_of_20sec_channels["hemisphere"] + "_" + ranks_of_20sec_channels["channel"]
@@ -1188,7 +1475,7 @@ def tukey_mean_difference_plot_20sec_ranks(filtered:str, freq_band:str, channel_
     plt.show()
 
     io_externalized.save_fig_png_and_svg(figure=fig, 
-                                         filename=f"Tukey_Mean_Difference_Plot_20sec_externalized_BSSU_ranks_{freq_band}_{channel_group}_{filtered}_z_score_{z_score}_of_2min_channel_rank_{rank_of_interest}",
+                                         filename=f"Tukey_Mean_Difference_Plot_{sec_per_epoch}sec_externalized_BSSU_ranks_{freq_band}_{channel_group}_{filtered}_z_score_{z_score}_of_2min_channel_rank_{rank_of_interest}",
                                          path=GROUP_FIGURES_PATH)
 
     return mean_all_differences, ci_upper, ci_lower, sample_size, patient_ids
