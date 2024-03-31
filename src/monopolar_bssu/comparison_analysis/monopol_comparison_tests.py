@@ -17,6 +17,7 @@ GROUP_RESULTS_PATH = find_folders.get_monopolar_project_path(folder="GroupResult
 GROUP_FIGURES_PATH = find_folders.get_monopolar_project_path(folder="GroupFigures")
 
 
+
 def correlation_tests_percept_methods(
     method_1: str,
     method_2: str,
@@ -84,94 +85,131 @@ def correlation_tests_percept_methods(
             np.isnan(stn_method_1["estimated_monopolar_beta_psd"].values).any()
             or np.isnan(stn_method_2["estimated_monopolar_beta_psd"].values).any()
         ):
-            print(f"Sub-{sub_hem} has NaN values in the estimated beta average.")
-
+            print(f"Sub-{sub_hem} has NaN values in the estimated beta average. NaN was exchanged by zero")
+            
         elif (
             np.isnan(stn_method_1["beta_relative_to_max"].values).any()
             or np.isnan(stn_method_2["beta_relative_to_max"].values).any()
         ):
-            print(f"Sub-{sub_hem} has NaN values in beta_relative_to_max.")
-
+            print(f"Sub-{sub_hem} has NaN values in beta_relative_to_max. NaN was exchanged by zero")
+            
         elif (
             np.isnan(stn_method_1["beta_cluster"].values).any()
             or np.isnan(stn_method_2["beta_cluster"].values).any()
         ):
-            print(f"Sub-{sub_hem} has NaN values in beta_relative_to_max.")
+            print(f"Sub-{sub_hem} has NaN values in beta_relative_to_max. NaN was exchanged by 3.")
+            
 
-        else:  # correlation tests only work if there is no NaN value
-            spearman_beta_stn = stats.spearmanr(
-                stn_method_1["estimated_monopolar_beta_psd"].values,
-                stn_method_2["estimated_monopolar_beta_psd"].values,
-            )
-            spearman_statistic = spearman_beta_stn.statistic
-            spearman_pval = spearman_beta_stn.pvalue
+        # replace NaNs by values
+        stn_method_1.loc[stn_method_1['estimated_monopolar_beta_psd'].isna(), 'estimated_monopolar_beta_psd'] = 0
+        stn_method_2.loc[stn_method_2["estimated_monopolar_beta_psd"].isna(), "estimated_monopolar_beta_psd"] = 0
 
-            # Pearson correlation between normalized beta to maximum within each electrode
-            pearson_normalized_beta_stn = stats.pearsonr(
-                stn_method_1["beta_relative_to_max"].values,
-                stn_method_2["beta_relative_to_max"].values,
-            )
-            pearson_normalized_statistic = pearson_normalized_beta_stn.statistic
-            pearson_normalized_pval = pearson_normalized_beta_stn.pvalue
+        stn_method_1.loc[stn_method_1["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
+        stn_method_2.loc[stn_method_2["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
 
-            spearman_beta_cluster_stn = stats.spearmanr(
-                stn_method_1["beta_cluster"].values, stn_method_2["beta_cluster"].values
-            )
-            spearman_cluster_statistic = spearman_beta_cluster_stn.statistic
-            spearman_cluster_pval = spearman_beta_cluster_stn.pvalue
+        stn_method_1.loc[stn_method_1["beta_cluster"].isna(), "beta_cluster"] = 3
+        stn_method_2.loc[stn_method_2["beta_cluster"].isna(), "beta_cluster"] = 3
+
+        # else:  # correlation tests only work if there is no NaN value
+        spearman_beta_stn = stats.spearmanr(
+            stn_method_1["estimated_monopolar_beta_psd"].values,
+            stn_method_2["estimated_monopolar_beta_psd"].values,
+        )
+        spearman_statistic = spearman_beta_stn.statistic
+        spearman_pval = spearman_beta_stn.pvalue
+
+        # Pearson correlation between normalized beta to maximum within each electrode
+        pearson_normalized_beta_stn = stats.pearsonr(
+            stn_method_1["beta_relative_to_max"].values,
+            stn_method_2["beta_relative_to_max"].values,
+        )
+        pearson_normalized_statistic = pearson_normalized_beta_stn.statistic
+        pearson_normalized_pval = pearson_normalized_beta_stn.pvalue
+
+        spearman_beta_cluster_stn = stats.spearmanr(
+            stn_method_1["beta_cluster"].values, stn_method_2["beta_cluster"].values
+        )
+        spearman_cluster_statistic = spearman_beta_cluster_stn.statistic
+        spearman_cluster_pval = spearman_beta_cluster_stn.pvalue
 
         # contacts with beta rank 1 and 2
+        no_rank_1 = "no"
+        no_rank_2 = "no"
         ############## method 1: ##############
         rank1_method_1 = stn_method_1.loc[stn_method_1.beta_rank == 1.0]
         # check if externalized has a rank 1 contact (sometimes there is so little beta activity, so there is only rank 1 and 5x rank 4)
         if len(rank1_method_1.contact.values) == 0:
             print(f"Sub-{sub_hem} has no rank 1 contact in the recording {method_1}.")
-            continue
+            no_rank_1 = "yes"
+            rank1_method_1 = "none"
+            #continue
 
-        rank1_method_1 = rank1_method_1.contact.values[0]
+        else:
+            rank1_method_1 = rank1_method_1.contact.values[0]
 
         rank2_method_1 = stn_method_1.loc[stn_method_1.beta_rank == 2.0]
         # check if externalized has a rank 2 contact (sometimes there is so little beta activity, so there is only rank 1 and 5x rank 4)
         if len(rank2_method_1.contact.values) == 0:
             print(f"Sub-{sub_hem} has no rank 2 contact in the recording {method_1}.")
-            continue
+            no_rank_2 = "yes"
+            rank2_method_1 = "none"
+            #continue
 
-        rank2_method_1 = rank2_method_1.contact.values[0]
+        else:
+            rank2_method_1 = rank2_method_1.contact.values[0]
 
         rank_1_and_2_method_1 = [rank1_method_1, rank2_method_1]
 
         ############### method 2: ##############
         rank1_method_2 = stn_method_2.loc[stn_method_2.beta_rank == 1.0]
+        
         # check if externalized has a rank 1 contact (sometimes there is so little beta activity, so there is only rank 1 and 5x rank 4)
         if len(rank1_method_2.contact.values) == 0:
             print(f"Sub-{sub_hem} has no rank 1 contact in the recording {method_2}.")
-            continue
-        rank1_method_2 = rank1_method_2.contact.values[0]
+            #continue
+            no_rank_1 = "yes"
+            rank1_method_2 = "none"
+
+        else:
+            rank1_method_2 = rank1_method_2.contact.values[0]
 
         rank2_method_2 = stn_method_2.loc[stn_method_2.beta_rank == 2.0]
         # check if externalized has a rank 2 contact (sometimes there is so little beta activity, so there is only rank 1 and 5x rank 4)
         if len(rank2_method_2.contact.values) == 0:
             print(f"Sub-{sub_hem} has no rank 2 contact in the recording {method_2}.")
-            continue
-        rank2_method_2 = rank2_method_2.contact.values[0]
+            #continue
+            no_rank_2 = "yes"
+            rank2_method_2 = "none"
+        
+        else:
+            rank2_method_2 = rank2_method_2.contact.values[0]
 
         rank_1_and_2_method_2 = [rank1_method_2, rank2_method_2]
 
         # yes if contact with rank 1 is the same
-        if rank1_method_1 == rank1_method_2:
+        if no_rank_1 == "yes":
+            compare_rank_1_contact = "no_rank_1"
+
+        elif rank1_method_1 == rank1_method_2:
             compare_rank_1_contact = "same"
 
         else:
             compare_rank_1_contact = "different"
 
         # yes if 2 contacts with rank 1 or 2 are the same (independent of which one is rank 1 or 2)
-        if set(rank_1_and_2_method_1) == set(rank_1_and_2_method_2):
+        if no_rank_1 == "yes" or no_rank_2 == "yes":
+            both_contacts_matching = "no_rank_1_or_2"
+        
+        elif set(rank_1_and_2_method_1) == set(rank_1_and_2_method_2):
             both_contacts_matching = "yes"
 
         else:
             both_contacts_matching = "no"
 
         # check if at least one contact selected as beta rank 1 or 2 match for both methods
+        if no_rank_1 == "yes" or no_rank_2 == "yes":
+            compare_rank_1_and_2_contacts = "no_rank_1_or_2"
+
         if set(rank_1_and_2_method_1).intersection(set(rank_1_and_2_method_2)):
             compare_rank_1_and_2_contacts = "at_least_one_contact_match"
 

@@ -6,6 +6,7 @@ import pickle
 
 import fooof
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 import scipy
@@ -711,9 +712,9 @@ def get_statistics(data_info:str, data=None):
     stats_dict = {
             "data_info": [data_info],
             "sample_size": [len(data)],
-            "mean_cv": [np.mean(data)],
-            "std_cv": [np.std(data)],
-            "median_cv": [np.median(data)],
+            "mean": [np.mean(data)],
+            "std": [np.std(data)],
+            "median": [np.median(data)],
             "outliers_indices": [outliers_indices],
             "outliers_values": [outliers_values],
             "n_outliers": [len(outliers)],
@@ -1200,6 +1201,7 @@ def differences_to_mean_rank(filtered:str,
 
     sample_size_and_infos = pd.DataFrame()
     all_data = {}
+    all_data_df = pd.DataFrame()
 
     fig = plt.figure(figsize=(10, 10), layout='tight')
     plt.subplot(1,1,1)
@@ -1245,6 +1247,13 @@ def differences_to_mean_rank(filtered:str,
 
         all_data[epochs] = all_differences_to_group_mean
 
+        all_data_df_preparation = {
+            "epochs": [epochs]*len(all_differences_to_group_mean), # x-axis
+            "differences_to_group_mean": all_differences_to_group_mean # y-axis
+        }
+        all_data_single_epoch = pd.DataFrame(all_data_df_preparation)
+        all_data_df = pd.concat([all_data_df, all_data_single_epoch], ignore_index=True)
+
         # plot the violin plot of the mean differences to the mean rank
         
         if plot_type == "boxplot":
@@ -1267,7 +1276,17 @@ def differences_to_mean_rank(filtered:str,
                         showextrema=True, 
                         showmedians=True,
                         positions=[epochs], # list of positions of the violins on the x axis
-                        widths=0.7,)
+                        widths=0.3,
+                        )
+
+            # sns.violinplot(data=all_data_single_epoch["differences_to_group_mean"], 
+            #                x=all_data_single_epoch["epochs"], 
+            #                showmeans=True, 
+            #                showextrema=True, 
+            #                showmedians=True, 
+            #                widths=0.3, 
+            #                inner="box") # quartile 
+            # create a different function for searborn, because it does not work with the violin plot function of matplotlib
 
         # plot each dot for each patient in the violin plot
         plt.plot([epochs]*len(all_differences_to_group_mean), all_differences_to_group_mean, 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
@@ -1301,6 +1320,7 @@ def differences_to_mean_rank(filtered:str,
 
     return {
         "all_differences_to_group_mean": all_data,
+        "all_data_df": all_data_df,
         "sample_size_and_infos": sample_size_and_infos}
 
 

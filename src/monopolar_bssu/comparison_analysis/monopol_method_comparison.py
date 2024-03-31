@@ -48,20 +48,21 @@ EXCLUDED_NO_BETA_EXT_OR_PERCEPT = [
 # no beta only in externalized -> exclude for comparison externalized vs externalized
 EXCLUDED_NO_BETA_EXT = [
     "028_Right",
-    "028_Left",
+    "028_Left", # unsure about 029_Left w artifact in raw time series, 029_Right
     "030_Left",
     "032_Right",
     "032_Left",
     "048_Right",
     "048_Left",
-    "049_Right",
-    "049_Left",
+    #"049_Right",
+    #"049_Left",
     "052_Left",
     "061_Right",  # NaNs, don't know why because nice beta
+    "069_Left", # zu viele Bewegungsartifakte
     "071_Right",
-    "072_Right",
-    "072_Left",
-    "075_Right",
+    #"072_Right",
+    #"072_Left",
+    "075_Right", # beta there initially but gone after re-ref
 ]
 
 # no beta only in percept postop -> exclude for comparison percept postop vs percept postop
