@@ -100,37 +100,37 @@ def correlation_tests_percept_methods(
             print(f"Sub-{sub_hem} has NaN values in beta_relative_to_max. NaN was exchanged by 3.")
             
 
-        # replace NaNs by values
-        stn_method_1.loc[stn_method_1['estimated_monopolar_beta_psd'].isna(), 'estimated_monopolar_beta_psd'] = 0
-        stn_method_2.loc[stn_method_2["estimated_monopolar_beta_psd"].isna(), "estimated_monopolar_beta_psd"] = 0
+        # # replace NaNs by values
+        # stn_method_1.loc[stn_method_1['estimated_monopolar_beta_psd'].isna(), 'estimated_monopolar_beta_psd'] = 0
+        # stn_method_2.loc[stn_method_2["estimated_monopolar_beta_psd"].isna(), "estimated_monopolar_beta_psd"] = 0
 
-        stn_method_1.loc[stn_method_1["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
-        stn_method_2.loc[stn_method_2["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
+        # stn_method_1.loc[stn_method_1["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
+        # stn_method_2.loc[stn_method_2["beta_relative_to_max"].isna(), "beta_relative_to_max"] = 0
 
-        stn_method_1.loc[stn_method_1["beta_cluster"].isna(), "beta_cluster"] = 3
-        stn_method_2.loc[stn_method_2["beta_cluster"].isna(), "beta_cluster"] = 3
+        # stn_method_1.loc[stn_method_1["beta_cluster"].isna(), "beta_cluster"] = 3
+        # stn_method_2.loc[stn_method_2["beta_cluster"].isna(), "beta_cluster"] = 3
 
-        # else:  # correlation tests only work if there is no NaN value
-        spearman_beta_stn = stats.spearmanr(
-            stn_method_1["estimated_monopolar_beta_psd"].values,
-            stn_method_2["estimated_monopolar_beta_psd"].values,
-        )
-        spearman_statistic = spearman_beta_stn.statistic
-        spearman_pval = spearman_beta_stn.pvalue
+        else:  # correlation tests only work if there is no NaN value
+            spearman_beta_stn = stats.spearmanr(
+                stn_method_1["estimated_monopolar_beta_psd"].values,
+                stn_method_2["estimated_monopolar_beta_psd"].values,
+            )
+            spearman_statistic = spearman_beta_stn.statistic
+            spearman_pval = spearman_beta_stn.pvalue
 
-        # Pearson correlation between normalized beta to maximum within each electrode
-        pearson_normalized_beta_stn = stats.pearsonr(
-            stn_method_1["beta_relative_to_max"].values,
-            stn_method_2["beta_relative_to_max"].values,
-        )
-        pearson_normalized_statistic = pearson_normalized_beta_stn.statistic
-        pearson_normalized_pval = pearson_normalized_beta_stn.pvalue
+            # Pearson correlation between normalized beta to maximum within each electrode
+            pearson_normalized_beta_stn = stats.pearsonr(
+                stn_method_1["beta_relative_to_max"].values,
+                stn_method_2["beta_relative_to_max"].values,
+            )
+            pearson_normalized_statistic = pearson_normalized_beta_stn.statistic
+            pearson_normalized_pval = pearson_normalized_beta_stn.pvalue
 
-        spearman_beta_cluster_stn = stats.spearmanr(
-            stn_method_1["beta_cluster"].values, stn_method_2["beta_cluster"].values
-        )
-        spearman_cluster_statistic = spearman_beta_cluster_stn.statistic
-        spearman_cluster_pval = spearman_beta_cluster_stn.pvalue
+            spearman_beta_cluster_stn = stats.spearmanr(
+                stn_method_1["beta_cluster"].values, stn_method_2["beta_cluster"].values
+            )
+            spearman_cluster_statistic = spearman_beta_cluster_stn.statistic
+            spearman_cluster_pval = spearman_beta_cluster_stn.pvalue
 
         # contacts with beta rank 1 and 2
         no_rank_1 = "no"

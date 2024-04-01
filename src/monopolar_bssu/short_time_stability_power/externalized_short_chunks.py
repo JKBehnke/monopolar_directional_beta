@@ -14,6 +14,7 @@ from fooof.plts.spectra import plot_spectrum
 from scipy.stats import shapiro
 from itertools import combinations
 from scipy.stats import wilcoxon, mannwhitneyu
+from statannotations.Annotator import Annotator
 
 # internal Imports
 from ..utils import find_folders as find_folders
@@ -834,6 +835,95 @@ def plot_coefficient_of_variation(filtered:str, freq_band:str, channel_group:str
                                          path=GROUP_FIGURES_PATH
     )
 
+def plot_CV_multiple_durations(filtered:str, 
+                                                     freq_band:str, 
+                                                     channel_group:str, 
+                                                     sec_per_epochs_list:list, 
+                                                     number_epochs:int):
+    """
+    Plot the coefficient of variation of the number of epochs x short power averages of the maximal beta channel per hemisphere
+    as a violin plot
+    """
+
+    data_organized_to_plot = pd.DataFrame()
+
+    #sec_per_epochs_list = [5, 10, 15, 20, 25]
+    sample_size_and_infos = pd.DataFrame()
+    
+    for e, epoch in enumerate(sec_per_epochs_list):
+
+        coefficient_variation_data = calculate_coefficient_of_variation(filtered=filtered, 
+                                                                        freq_band=freq_band, 
+                                                                        channel_group=channel_group, 
+                                                                        sec_per_epoch=epoch,
+                                                                        number_epochs=number_epochs)
+        
+        epoch_data = coefficient_variation_data["cv"].values
+        epoch_x = [e+1]*len(epoch_data)
+
+        data_to_plot = pd.DataFrame({"epoch_data": epoch_data, "epoch_x": epoch_x})
+        data_organized_to_plot = pd.concat([data_organized_to_plot, data_to_plot], ignore_index=True)
+
+        statistics_info = io_externalized.get_statistics(data_info=str(epoch), data=coefficient_variation_data["cv"])
+
+        # get the outlier indices
+        outlier_indices = statistics_info["outliers_indices"].values[0]
+        outlier_patient_ids = coefficient_variation_data["patient_id"].iloc[outlier_indices].values
+        outlier_values = coefficient_variation_data["cv"].iloc[outlier_indices].values
+        statistics_info["outlier_patient_ids"] = [outlier_patient_ids]
+
+        sample_size_and_infos = pd.concat([sample_size_and_infos, statistics_info], ignore_index=True)
+
+
+
+    # plot a violinplot
+    fig = plt.figure() 
+    ax = fig.add_subplot()
+
+    sns.violinplot(
+        data=data_organized_to_plot,
+        x="epoch_x",
+        y="epoch_data",
+        palette="coolwarm",
+        inner="box",
+        ax=ax,
+    )
+
+    # statistical test:
+    pairs = list(combinations(np.arange(1, len(sec_per_epochs_list)+1), 2))
+
+    annotator = Annotator(ax, pairs, data=data_organized_to_plot, x='epoch_x', y="epoch_data")
+    annotator.configure(test='Wilcoxon', text_format='star')  # or t-test_ind ??
+    annotator.apply_and_annotate()
+
+    sns.stripplot(
+        data=data_organized_to_plot,
+        x="epoch_x",
+        y="epoch_data",
+        ax=ax,
+        size=5, # 6
+        color="black",
+        alpha=0.3,  # Transparency of dots
+    )
+
+    sns.despine(left=True, bottom=True)  # get rid of figure frame
+
+    plt.title(f"Coefficient of Variance of {number_epochs}x {freq_band} power"+ 
+              f"\ncalculated from power spectra of specific window duration"+
+              f"\n only maximal {freq_band} {channel_group} channels")
+    plt.ylabel(f"CV")
+    plt.xlabel("window length [sec]")
+    plt.xticks(range(len(sec_per_epochs_list)), [str(num) for num in sec_per_epochs_list])
+
+    fig.tight_layout()
+
+    io_externalized.save_fig_png_and_svg(figure=fig,
+                                         filename=f"Coefficient_of_Variation_{number_epochs}x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}",
+                                         path=GROUP_FIGURES_PATH
+    )
+
+    return sample_size_and_infos
+
 def plot_coefficient_of_variation_multiple_durations(filtered:str, 
                                                      freq_band:str, 
                                                      channel_group:str, 
@@ -883,7 +973,7 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str,
         # plot each dot for each patient in the violin plot
         plt.plot(power_spectrum_length, coefficient_variation_data["cv"], 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
 
-        statistics_info = get_statistics(data_info=str(epoch), data=coefficient_variation_data["cv"])
+        statistics_info = io_externalized.get_statistics(data_info=str(epoch), data=coefficient_variation_data["cv"])
 
         # get the outlier indices
         outlier_indices = statistics_info["outliers_indices"].values[0]
@@ -1180,14 +1270,16 @@ def exclude_outliers(outlier_indices:list, data:list, patient_ids:list):
         "sample_size": sample_size}
 
 
-def differences_to_mean_rank(filtered:str, 
-                            freq_band:str, 
-                            channel_group:str, 
-                            rank_of_interest:int,
-                            sec_per_epoch:list,
-                            number_epochs:int,
-                            group_or_2min_mean:str,
-                            plot_type:str):
+
+def differences_to_mean_rank_plot(
+        filtered:str, 
+        freq_band:str, 
+        channel_group:str, 
+        rank_of_interest:int,
+        sec_per_epoch:list,
+        number_epochs:int,
+        group_or_2min_mean:str,
+        plot_type:str):
     """
     Function to plot a violin plot of MEAN of differences to the mean rank of all short power spectra within each patient hemisphere
     - For each patient hemisphere, one power channel with the specific 2min power rank:
@@ -1200,11 +1292,9 @@ def differences_to_mean_rank(filtered:str,
     """
 
     sample_size_and_infos = pd.DataFrame()
+
     all_data = {}
     all_data_df = pd.DataFrame()
-
-    fig = plt.figure(figsize=(10, 10), layout='tight')
-    plt.subplot(1,1,1)
 
     for epochs in sec_per_epoch:
 
@@ -1254,44 +1344,7 @@ def differences_to_mean_rank(filtered:str,
         all_data_single_epoch = pd.DataFrame(all_data_df_preparation)
         all_data_df = pd.concat([all_data_df, all_data_single_epoch], ignore_index=True)
 
-        # plot the violin plot of the mean differences to the mean rank
-        
-        if plot_type == "boxplot":
-            plt.boxplot(all_differences_to_group_mean, 
-                            vert=True, 
-                            widths=1.0, 
-                            patch_artist=True, 
-                            showmeans=True,
-                            meanline=True,
-                            boxprops=dict(facecolor='white'),
-                            positions=[epochs])
-            # orange line for the median
-            # green dotted line for the mean
-            
-
-        elif plot_type == "violinplot":
-            # Plot a violin plot showing the distribution of the coefficient of variation, with the patient ids in different colors
-            plt.violinplot(all_differences_to_group_mean, 
-                        showmeans=True, 
-                        showextrema=True, 
-                        showmedians=True,
-                        positions=[epochs], # list of positions of the violins on the x axis
-                        widths=0.3,
-                        )
-
-            # sns.violinplot(data=all_data_single_epoch["differences_to_group_mean"], 
-            #                x=all_data_single_epoch["epochs"], 
-            #                showmeans=True, 
-            #                showextrema=True, 
-            #                showmedians=True, 
-            #                widths=0.3, 
-            #                inner="box") # quartile 
-            # create a different function for searborn, because it does not work with the violin plot function of matplotlib
-
-        # plot each dot for each patient in the violin plot
-        plt.plot([epochs]*len(all_differences_to_group_mean), all_differences_to_group_mean, 'o', alpha=0.3, markersize=5, color="k") #color=colors[i]
-
-        statistics_info = get_statistics(data_info=str(epochs), data=all_differences_to_group_mean)
+        statistics_info = io_externalized.get_statistics(data_info=str(epochs), data=all_differences_to_group_mean)
 
         # get the outlier indices
         outlier_indices = statistics_info["outliers_indices"].values[0]
@@ -1302,15 +1355,60 @@ def differences_to_mean_rank(filtered:str,
 
         sample_size_and_infos = pd.concat([sample_size_and_infos, statistics_info], ignore_index=True)
 
-    # plt.bar(range(len(coefficient_variation_data["cv"])), coefficient_variation_data["cv"], color='skyblue')
+    # plot the violin plot of the mean differences to the mean rank
+    fig = plt.figure()
+    ax = fig.add_subplot()
+
+    if plot_type == "boxplot":
+        
+        sns.boxplot(all_data_df, 
+                    x="epochs",
+                    y="differences_to_group_mean",
+                    palette="coolwarm",
+                    inner="box",
+                    ax=ax)
+        # orange line for the median
+        # green dotted line for the mean
+        
+
+    elif plot_type == "violinplot":
+                
+        sns.violinplot(
+            data=all_data_df,
+            x="epochs",
+            y="differences_to_group_mean",
+            palette="coolwarm",
+            inner="box",
+            ax=ax,
+        )
+
+    # statistical test:
+    pairs = list(combinations(sec_per_epoch, 2))
+
+    annotator = Annotator(ax, pairs, data=all_data_df, x='epochs', y="differences_to_group_mean")
+    annotator.configure(test='Wilcoxon', text_format='star')  # or t-test_ind ??
+    annotator.apply_and_annotate()
+
+    sns.stripplot(
+        data=all_data_df,
+        x="epochs",
+        y="differences_to_group_mean",
+        ax=ax,
+        size=7, # 6
+        color="black",
+        alpha=0.3,  # Transparency of dots
+    )
+
+    sns.despine(left=True, bottom=True)  # get rid of figure frame
+
+     
     plt.ylabel(f'Mean {freq_band} rank difference to {group_or_2min_mean} mean rank')
     plt.xlabel('Window length of Power Spectra (seconds)')
     plt.title(f'Mean rank difference to {group_or_2min_mean} rank of {number_epochs}x {freq_band} power epochs '+
                f'\nin the maximal {freq_band} channels from {channel_group}')
-    
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    plt.tight_layout()
-    plt.show()
+    plt.xticks(range(len(sec_per_epoch)), [str(num) for num in sec_per_epoch])
+
+    fig.tight_layout()
 
     io_externalized.save_fig_png_and_svg(figure=fig,
                                          filename=f"Mean_rank_difference_to_rank{rank_of_interest}_of_{group_or_2min_mean}_{number_epochs}x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}_{plot_type}",
@@ -1319,8 +1417,8 @@ def differences_to_mean_rank(filtered:str,
 
 
     return {
-        "all_differences_to_group_mean": all_data,
         "all_data_df": all_data_df,
+        "all_data": all_data,
         "sample_size_and_infos": sample_size_and_infos}
 
 
@@ -1345,16 +1443,16 @@ def wilcoxon_signed_rank_test_between_diff_to_rank(
     
     # get the data of each epoch length
 
-    difference_to_rank_data = differences_to_mean_rank(filtered=filtered, 
+    difference_to_rank_data = differences_to_mean_rank_plot(filtered=filtered, 
                                                         freq_band=freq_band, 
                                                         channel_group=channel_group, 
                                                         rank_of_interest=rank_of_interest,
                                                         sec_per_epoch=sec_per_epochs_list,
                                                         number_epochs=number_epochs,
                                                         group_or_2min_mean=group_or_2min_mean,
-                                                        plot_type="boxplot")
+                                                        plot_type="violinplot")
     
-    all_differences_to_group_mean = difference_to_rank_data["all_differences_to_group_mean"]
+    all_dict_dict = difference_to_rank_data["all_data"]
         
     # Wilcoxon Signed-Rank Test für jedes Paar durchführen
     for pair in pairs:
@@ -1368,11 +1466,11 @@ def wilcoxon_signed_rank_test_between_diff_to_rank(
             group2_info = data_info[data_info["data_info"] == str(group2)]
 
             data_to_test_group1 = exclude_outliers(outlier_indices=group1_info["outliers_indices"].values[0],
-                                                   data=all_differences_to_group_mean[group1],
+                                                   data=all_dict_dict[group1],
                                                     patient_ids=group1_info["patient_ids"].values[0])
             
             data_to_test_group2 = exclude_outliers(outlier_indices=group2_info["outliers_indices"].values[0],
-                                                    data=all_differences_to_group_mean[group2],
+                                                    data=all_dict_dict[group2],
                                                     patient_ids=group2_info["patient_ids"].values[0])
             
             # mann whitney test because different sample size
@@ -1384,9 +1482,9 @@ def wilcoxon_signed_rank_test_between_diff_to_rank(
 
         elif outliers_excluded == "no":
 
-            statistic, p_value = wilcoxon(all_differences_to_group_mean[group1], all_differences_to_group_mean[group2])
-            sample_size[group1] = len(all_differences_to_group_mean[group1])
-            sample_size[group2] = len(all_differences_to_group_mean[group2])
+            statistic, p_value = wilcoxon(all_dict_dict[group1], all_dict_dict[group2])
+            sample_size[group1] = len(all_dict_dict[group1])
+            sample_size[group2] = len(all_dict_dict[group2])
 
         wilcoxon_result = {
             "epoch_length_1": [group1],

@@ -84,7 +84,7 @@ EXCLUDED_NO_BETA_PERCEPT = [
     "075_Right",
 ]
 
-
+# watch out, there's another exclude patients function in the monopol_method_comparison file!
 def exclude_patients(rec:str):
     """
     Input:
