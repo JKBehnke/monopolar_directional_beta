@@ -18,6 +18,7 @@ from ..utils import loadResults as loadResults
 from ..utils import sub_recordings_dict as sub_recordings_dict
 from ..utils import externalized_lfp_preprocessing as externalized_lfp_preprocessing
 from ..externalized_lfp import feats_ssd as feats_ssd
+from ..short_time_stability_power import externalized_short_chunks as externalized_short_chunks
 
 GROUP_RESULTS_PATH = find_folders.get_monopolar_project_path(folder="GroupResults")
 GROUP_FIGURES_PATH = find_folders.get_monopolar_project_path(folder="GroupFigures")
@@ -32,6 +33,21 @@ BSSU_CHANNELS = [
     "03",
     "12",
     "13",
+    "23",
+    "1A2A",
+    "1B2B",
+    "1C2C",
+    "1A1B",
+    "1A1C",
+    "1B1C",
+    "2A2B",
+    "2A2C",
+    "2B2C",
+]
+
+BSSU_CHANNELS_12 = [
+    "01",
+    "12",
     "23",
     "1A2A",
     "1B2B",
@@ -167,6 +183,208 @@ def plot_power_spectra_monopolar(method: str, fooof: str, only_directional: str)
             filename=f"power_spectra_{method}_{sub_hem}_{directionality_filename}",
             figure=fig,
         )
+
+
+def plot_externalized_FOOOF_power_spectra(method: str, only_directional: str):
+    """
+    Input:
+        - method: str
+            "euclidean_directional_externalized_bssu"
+            "JLB_directional_externalized_bssu"
+            "detec_strelow_contacts_externalized_bssu"
+            "euclidean_directional"
+            "JLB_directional"
+            "detec_strelow_contacts"
+            "externalized_bssu_monopolar"
+            "externalized_one_to_zero_two_to_three"
+
+            - fooof: str "yes" or "no"
+
+            - only_directional: str "yes" or "no"
+    """
+
+    # get the correct contacts to plot
+    if only_directional == "yes":
+        contacts = MONOPOLAR_DIRECTIONAL
+        directionality_filename = "directional"
+    else:
+        contacts = MONOPOLAR_ALL
+        directionality_filename = "all_contacts"
+
+    if method == "externalized_one_to_zero_two_to_three":
+        loaded_data = io_externalized.load_externalized_pickle(
+            filename=f"fooof_externalized_group_only_high_pass_filtered",
+            reference="bipolar_to_lowermost",
+            fooof_version="v2",
+        )
+    
+    else:
+    # get correct filename
+        print("only works for externalized FOOOF 0-1 and 2-3 (only high pass filtered, FOOOF version 2)")
+
+    # included subjects
+    subject_hemisphere_unique = loaded_data.subject_hemisphere.unique()
+
+    for sub_hem in subject_hemisphere_unique:
+        # get bids ID, and hemisphere
+        bids_id = get_bids_id_from_sub_hem(subject_hemisphere=sub_hem)["bids_id"]
+        hemisphere = get_bids_id_from_sub_hem(subject_hemisphere=sub_hem)["hemisphere"]
+
+        # get data
+        sub_hem_data = loaded_data.loc[loaded_data.subject_hemisphere == sub_hem]
+
+        # figure path
+        figures_path = find_folders.get_monopolar_project_path(
+            folder="figures", sub=bids_id
+        )
+
+        # figure layout for one subject hemisphere
+        fig = plt.figure(figsize=(20, 20), layout="tight")
+        fig.suptitle(f"Power Spectra: {sub_hem}, {method}", fontsize=55, y=1.02)
+
+        for cont in contacts:
+            # there is no fooof data for contact 0
+            if cont == "0":
+                continue
+
+            cont_data = sub_hem_data.loc[sub_hem_data.contact == cont]
+
+            # check if data exists:
+            if len(cont_data) == 0:
+                print(f"No data for {sub_hem}, {cont}")
+                continue
+
+            fooof_power_spectrum = cont_data["fooof_power_spectrum"].values[0]
+            frequencies = np.arange(1, (len(fooof_power_spectrum) + 1))
+
+            # plot power spectra
+            plt.subplot(1, 1, 1)
+
+            plt.plot(frequencies, fooof_power_spectrum, label=f"{cont}", linewidth=3)
+
+            plt.xlabel("Frequency [Hz]", fontdict={"size": 40})
+            plt.ylabel("PSD", fontdict={"size": 40})
+
+            # plt.ylim(1, 100)
+            plt.xticks(fontsize=35)
+            plt.yticks(fontsize=35)
+
+            # Plot the legend only for the first row "postop"
+            plt.legend(loc="upper right", edgecolor="black", fontsize=40)
+
+        # save figure
+        io_externalized.save_fig_png_and_svg(
+            path=figures_path,
+            filename=f"power_spectra_{method}_{sub_hem}_{directionality_filename}",
+            figure=fig,
+        )
+
+
+def plot_short_power_spectra_externalized_bssu(sub_hem_list: list, filtered: str, sec_per_epoch: int, number_epochs: int):
+    """
+    Input: 
+        - sub_hem_list: list e.g. ["024_Right", "024_Left"]
+        - filtered: str, "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
+        - sec_per_epoch: int, 20
+        - number_epochs: int, 9
+
+        Higher frequency resolution here! 
+        e.g. 20 sec epochs with 50% overlap: 1/20 sec = 0.05 Hz resolution
+    
+    """
+
+    # load data
+    loaded_data = io_externalized.load_externalized_pickle(
+        filename=f"power_spectra_BSSU_externalized_{filtered}_2min_and_{sec_per_epoch}sec_{number_epochs}epochs")
+    
+    # add a column "sub_hem" with merged columns "subject" + "hemisphere"
+    loaded_data["sub_hem"] = loaded_data["subject"] + "_" + loaded_data["hemisphere"]
+    
+    if sub_hem_list == ["all"]:
+        sub_hem_unique = loaded_data["sub_hem"].unique()
+    
+    else: 
+        sub_hem_unique = sub_hem_list
+
+    for sub_hem in sub_hem_unique:
+        # get bids ID 
+        bids_id = get_bids_id_from_sub_hem(subject_hemisphere=sub_hem)["bids_id"]
+
+        # figure path
+        figures_path = find_folders.get_monopolar_project_path(
+            folder="figures", sub=bids_id
+        )
+
+        # get data
+        sub_hem_data = loaded_data.loc[loaded_data.sub_hem == sub_hem]
+
+        for chan in BSSU_CHANNELS_12:
+
+            fig = plt.figure(figsize=(20, 20), layout="tight")
+            fig.suptitle(
+                f"Power Spectra BSSU externalized: {sub_hem}, {chan}",
+                fontsize=55,
+                y=1.02,
+            )
+            chan_data = sub_hem_data.loc[sub_hem_data.channel == chan]
+            frequencies = chan_data["frequencies"].values[0]
+
+            # get 2min power spectrum data
+            power_2min = chan_data["power_spectrum_2_min"].values[0]
+
+            # plot power spectra
+            plt.subplot(1, 1, 1)
+
+            # plot the average power spectrum of the 2 min recording
+            plt.plot(
+                frequencies,
+                power_2min,
+                label="2 min",
+                linewidth=7,
+                color="black",
+            )
+            
+            # plot the 20 sec power spectra
+            for epoch in range(1, number_epochs + 1):
+                
+                power_epoch = chan_data[f"power_spectrum_{sec_per_epoch}_sec_{epoch}"].values[0]
+
+                if len(power_epoch) == 0:
+                    print(f"Epoch {epoch} of {sub_hem}, {chan} is empty")
+                    continue
+
+                plt.plot(
+                    frequencies,
+                    power_epoch,
+                    label=f"{epoch}: {sec_per_epoch} sec",
+                    linewidth=3,
+                )
+
+                plt.xlabel("Frequency [Hz]", fontdict={"size": 40})
+                plt.ylabel("PSD +- SEM", fontdict={"size": 40})
+
+                plt.xlim(0, 80)
+                plt.xticks(fontsize=35)
+                plt.yticks(fontsize=35)
+
+                # Plot the legend only for the first row "postop"
+                plt.legend(loc="upper right", edgecolor="black", fontsize=40)
+            
+            # save figure
+            io_externalized.save_fig_png_and_svg(
+                    path=figures_path,
+                    filename=f"power_spectra_BSSU_externalized_{number_epochs}x_{sec_per_epoch}_sec_{sub_hem}_{chan}_{filtered}",
+                    figure=fig,
+                )
+
+
+
+
+
+
+    
+    
+
 
 
 def plot_power_spectra_20sec_externalized_bssu(sub_hem:str, chan:str, fourier_transform_2min, chunks:dict):

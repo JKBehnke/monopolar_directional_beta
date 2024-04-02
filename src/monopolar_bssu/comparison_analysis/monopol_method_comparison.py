@@ -54,15 +54,15 @@ EXCLUDED_NO_BETA_EXT = [
     "032_Left",
     "048_Right",
     "048_Left",
-    #"049_Right",
-    #"049_Left",
-    "052_Left",
+    "049_Left",
+    #"052_Left",
     "061_Right",  # NaNs, don't know why because nice beta
-    "069_Left", # zu viele Bewegungsartifakte
+    #"069_Left", # zu viele Bewegungsartifakte, too short for 20sec analysis
     "071_Right",
-    #"072_Right",
+    "072_Right",
     #"072_Left",
     "075_Right", # beta there initially but gone after re-ref
+    "077_Left",
 ]
 
 # no beta only in percept postop -> exclude for comparison percept postop vs percept postop

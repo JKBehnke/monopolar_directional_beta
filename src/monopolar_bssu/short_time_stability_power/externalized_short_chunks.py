@@ -100,29 +100,29 @@ FREQ_BAND_LIST = ["beta", "high_beta", "low_beta"]
 # Data: io_externalized.load_externalized_pickle(filename="power_spectra_BSSU_externalized_20sec_group_notch_and_band_pass_filtered")
 # column "chunks": each row (sub, hem, channel) with dictionary keys 1-6, values are time series of 20 seconds (5000 values)
 
-def exclude_patients():
-    """
-    Exclude patients with bad recordings
-        - 069_Left: recording too short because too many artifacts were taken out
-    """
+# def exclude_patients():
+#     """
+#     Exclude patients with bad recordings
+#         - 069_Left: recording too short because too many artifacts were taken out
+#     """
 
-    exclude_sub_hem = [
-        "028_Right",
-        "028_Left", # unsure about 029_Left w artifact in raw time series, 029_Right
-        "030_Left",
-        "031_Left",
-        "031_Right",
-        "032_Left",
-        "048_Left",
-        "048_Right",
-        "052_Left",
-        "061_Right",
-        "069_Left",
-        "071_Right",
-        "079_Right",
-        ] 
+#     exclude_sub_hem = [
+#         "028_Right",
+#         "028_Left", # unsure about 029_Left w artifact in raw time series, 029_Right
+#         "030_Left",
+#         "031_Left",
+#         "031_Right",
+#         "032_Left",
+#         "048_Left",
+#         "048_Right",
+#         "052_Left",
+#         "061_Right",
+#         "069_Left",
+#         "071_Right",
+#         "079_Right",
+#         ] 
 
-    return exclude_sub_hem
+#     return exclude_sub_hem
 
 # TODO: focus on 20s duration of rec., instead of 4x 20s, get 30x 20s with overlap of windows
 
@@ -528,7 +528,7 @@ def frequency_band_mean_sd(filtered:str, sec_per_epoch:int, number_epochs:int):
             hem_data = sub_data[sub_data["hemisphere"] == hem]
 
             # exclude patient hemispheres if necessary
-            if f"{sub}_{hem}" in exclude_patients():
+            if f"{sub}_{hem}" in sub_recordings_dict.exclude_patients(rec="externalized"):
                 print(f"excluded: {sub}_{hem}")
                 continue
 
@@ -930,6 +930,7 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str,
                                                      sec_per_epochs_list:list, 
                                                      number_epochs:int):
     """
+    OLD version
     Plot the coefficient of variation of the 4 x short power averages of the maximal beta channel per hemisphere
     as a violin plot
     """
@@ -998,7 +999,7 @@ def plot_coefficient_of_variation_multiple_durations(filtered:str,
     plt.show()
 
     io_externalized.save_fig_png_and_svg(figure=fig,
-                                         filename=f"Coefficient_of_Variation_{number_epochs}x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}",
+                                         filename=f"Coefficient_of_Variation_{number_epochs}x_multiple_sec_spectra_externalized_BSSU_maximal_{freq_band}_{channel_group}_{filtered}_boxplot",
                                          path=GROUP_FIGURES_PATH
     )
 
