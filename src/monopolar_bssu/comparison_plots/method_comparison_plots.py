@@ -349,7 +349,7 @@ def bssu_vs_externalized_correlation(
     }
 
 
-def bssu_vs_externalized_boxplot(
+def bssu_vs_externalized_plot(
         percept_session: str,
         bssu_version: str,
         externalized_version: str,
