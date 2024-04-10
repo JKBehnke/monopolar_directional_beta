@@ -29,26 +29,26 @@ sub_bids_id_dict = {
 
 }
 
-# no beta either in externalized or percept -> exclude for comparison externalized vs percept
-EXCLUDED_NO_BETA_EXT_OR_PERCEPT = [
-    "028_Right",
-    "028_Left",
-    "029_Right",
-    "029_Left",
-    "030_Left",
-    "032_Right",
-    "032_Left",
-    "048_Right",
-    "048_Left",
-    "049_Right",
-    "049_Left",
-    "052_Left",
-    "056_Left",
-    "061_Right",
-    "071_Right",
-    "072_Left",
-    "075_Right",
-]
+# # no beta either in externalized or percept -> exclude for comparison externalized vs percept
+# EXCLUDED_NO_BETA_EXT_OR_PERCEPT = [
+#     "028_Right",
+#     "028_Left",
+#     "029_Right",
+#     "029_Left",
+#     "030_Left",
+#     "032_Right",
+#     "032_Left",
+#     "048_Right",
+#     "048_Left",
+#     "049_Right",
+#     "049_Left",
+#     "052_Left",
+#     "056_Left",
+#     "061_Right",
+#     "071_Right",
+#     "072_Left",
+#     "075_Right",
+# ]
 
 # no beta only in externalized -> exclude for comparison externalized vs externalized
 EXCLUDED_NO_BETA_EXT = [
@@ -72,6 +72,7 @@ EXCLUDED_NO_BETA_EXT = [
 
 # no beta only in percept postop -> exclude for comparison percept postop vs percept postop
 EXCLUDED_NO_BETA_PERCEPT = [
+    "028_Left",
     "029_Right",
     "029_Left",
     "032_Right",

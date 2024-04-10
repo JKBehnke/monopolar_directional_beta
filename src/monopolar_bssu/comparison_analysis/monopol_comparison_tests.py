@@ -533,7 +533,7 @@ def get_comparison_matrix_for_heatmap_from_DF(
         - value_to_plot: e.g. "percentage_at_least_one_same_contact_rank_1_and_2", "percentage_both_contacts_matching"
         - clinical_session: "fu3m", "fu12m", "fu18or24m"
         - percept_session: "postop", "fu3m", "fu12m", "fu18or24m"
-        - rank_or_rel_above_70: "rank", "correlation"
+        - rank_or_correlation: "rank", "correlation"
 
 
     """

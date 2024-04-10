@@ -421,7 +421,7 @@ def bssu_vs_externalized_plot(
     sns.despine(left=True, bottom=True)  # get rid of figure frame
 
     plt.title(f"Beta Power {title_str} to {externalized_version} 01, 23 beta power, \n6 directional contacts per lead")
-    plt.ylabel(f"fisher-transformed spearman correlation coefficient")
+    plt.ylabel(f"{title_str} coefficient")
     plt.xlabel("method to estimate pseudo-monopolar beta power")
     plt.xticks(range(len(list_of_methods)), ["Euclidean", "JLB", "Detec"])
 

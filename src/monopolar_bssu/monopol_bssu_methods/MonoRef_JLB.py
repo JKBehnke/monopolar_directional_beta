@@ -17,6 +17,7 @@ from ..utils import io_percept as io_percept
 from ..utils import percept_lfp_preprocessing as percept_lfp_preprocessing
 from ..utils import externalized_lfp_preprocessing as externalized_lfp_preprocessing
 from ..utils import io_externalized as io_externalized
+from ..utils import io_monopolar_comparison as io_monopolar_comparison
 
 
 # import analysis.loadResults as loadcsv
@@ -413,10 +414,10 @@ def MonoRefPsd_highestRank(sub: str, normalization: str, hemisphere: str):
 
     ############# READ CSV FILE of monopolar referenced AVERAGED PSD as Dataframe #############
     # get path to results folder of subject
-    results_path = findfolders.get_local_path(folder="results", sub=sub)
+    results_path = find_folders.get_local_path(folder="results", sub=sub)
 
     # read .csv file as Dataframe
-    monoRef_result = loadcsv.load_MonoRef_JLBresultCSV(
+    monoRef_result = io_monopolar_comparison.load_MonoRef_JLBresultCSV(
         sub=sub, normalization=normalization, hemisphere=hemisphere
     )
 
@@ -774,7 +775,7 @@ def fooof_monoRef_JLB(fooof_version: str):
             # cluster values into 3 categories: <40%, 40-70% and >70%
             stn_data_2_copy["beta_cluster"] = stn_data_2_copy[
                 "beta_relative_to_max"
-            ].apply(helpers.assign_cluster)
+            ].apply(percept_lfp_preprocessing.assign_cluster)
 
             # merge all dataframes (per session per STN)
             monopolar_results_all = pd.concat([monopolar_results_all, stn_data_2_copy])
