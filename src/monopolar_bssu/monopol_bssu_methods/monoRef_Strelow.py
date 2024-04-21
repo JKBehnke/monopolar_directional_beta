@@ -449,7 +449,7 @@ def detec_rank_level_and_direction_externalized_bssu(
         # cluster values into 3 categories: <40%, 40-70% and >70%
         all_directional_data_copy["beta_cluster"] = all_directional_data_copy[
             "beta_relative_to_max"
-        ].apply(externalized_lfp_preprocessing.assign_cluster)
+        ].apply(percept_lfp_preprocessing.assign_cluster)
 
         # save
         beta_all_directional_ranks = pd.concat(

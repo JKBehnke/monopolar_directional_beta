@@ -437,5 +437,224 @@ def bssu_vs_externalized_plot(
 
 
         
+################################### Monopolar estimation methods in comparison to each other 
+
+
+def bssu_vs_bssu_method_correlation(
+    bssu_version: str,
+    list_of_methods: list,
+    percept_session: str,
+):
+    """
+    This function correlates all methods ins list_of_methods to the externalied version and compares the correlation of each method with each other
+    - fisher-transformed correlation
+    - t-test
+
+    Input:
+        - percept_session: "postop", only relevant, if bssu_version == "percept"
+        - fooof_version: "v2"
+        - bssu_version: "externalized" or "percept"
+        - new_reference: "one_to_zero_two_to_three"
+        - list_of_methods: ["euclidean_directional_externalized_bssu", "JLB_directional_externalized_bssu", "detec_strelow_contacts_externalized_bssu"]
+
+    """
+
+    organized_data = {} # nan free and fisher transformed (np.arctanh)
+    spearman_original_data = {}
+    sub_hemispheres = {}
+    data_description = pd.DataFrame()
+    fisher_transformed_data_description = pd.DataFrame()
+    mwu_all_results = pd.DataFrame()
+
+    pairs = list(combinations(list_of_methods, 2))
+    
+    for method_1 in list_of_methods:
+        for method_2 in list_of_methods:
+
+            if method_1 == method_2:
+                continue
+
+            loaded_data = monopol_method_comparison.correlation_monopol_fooof_beta_methods(
+                method_1=method_1,
+                method_2=method_2,
+                fooof_version="v2",
+                bssu_version=bssu_version,
+            )
+
+            method_data = loaded_data["single_stn_results"]
+
+            # if bssu_version is "percept" make sure to only keep the correct session
+            if bssu_version == "percept":
+                method_data = method_data.loc[method_data["session"] == percept_session]
+
+            estimated_beta_spearman = method_data["estimated_beta_spearman_r"]
+            sub_hem = method_data["subject_hemisphere"]
+            
+            # check for NaN values
+            nan_indices = estimated_beta_spearman.isna()
+            nan_free_estimated_beta_spearman = estimated_beta_spearman[~nan_indices]
+            nan_free_sub_hem = sub_hem[~nan_indices]
+
+            # fisher_transformation of correlation coefficients
+            fisher_transformed = np.arctanh(nan_free_estimated_beta_spearman)
+
+            # in case of correlation coefficients of ±1 the fisher transformation results in an inf value (division by zero)
+            # exclude inf from the dataset
+            inf_indices = np.isinf(fisher_transformed)
+            fisher_transformed = fisher_transformed[~inf_indices]
+            nan_free_sub_hem = nan_free_sub_hem[~inf_indices]
+            #fisher_transformed = fisher_transformed[np.isfinite(fisher_transformed)]
+
+            # save in dictionary
+            organized_data[f"{method_1}_{method_2}"] = fisher_transformed
+            sub_hemispheres[f"{method_1}_{method_2}"] = nan_free_sub_hem
+            spearman_original_data[f"{method_1}_{method_2}"] = nan_free_estimated_beta_spearman
+
+            # get statistics
+            stats_df = io_externalized.get_statistics(data_info=f"{method_1}_{method_2}", data=nan_free_estimated_beta_spearman)
+            data_description = pd.concat([data_description, stats_df], ignore_index=True)
+
+            fisher_stats = io_externalized.get_statistics(data_info=f"{method_1}_{method_2}", data=fisher_transformed)
+            fisher_transformed_data_description = pd.concat([fisher_transformed_data_description, fisher_stats], ignore_index=True)
+    
+    for pair in pairs:
+        group1_spearman = pair[0]
+        group2_spearman = pair[1]
+        comparison_1 = f"{group1_spearman}_{group2_spearman}"
+
+        if group1_spearman == group2_spearman:
+            continue
+
+        for pair2 in pairs:
+            group21_spearman = pair2[0]
+            group22_spearman = pair2[1]
+            comparison_2 = f"{group21_spearman}_{group22_spearman}"
+
+            if group21_spearman == group22_spearman:
+                continue
+
+            # perform a mann-whithney-u test (non-parametric, different sample sizes)
+            statistic, p_value = mannwhitneyu(organized_data[comparison_1], organized_data[comparison_2], alternative="two-sided")
+
+            mwu_result = {
+                "method_1": [comparison_1],
+                "method_2": [comparison_2],
+                "statistic": [statistic],
+                "p_value": [p_value],
+                "significant": [p_value < 0.05]
+            }
+
+            mwu_pair = pd.DataFrame(mwu_result)
+            mwu_all_results = pd.concat([mwu_all_results, mwu_pair], ignore_index=True)
+            
+        
+    # plot a barplot
+    #sns.barplot(result_dataframe, x="methods_x", y="percentage_significant_y")
+
+    return {
+        "spearman_data_description": data_description,
+        "fisher_transformed_data_description": fisher_transformed_data_description,
+        "mwu_result": mwu_all_results,
+        "organized_data": organized_data,
+        "sub_hem_data": sub_hemispheres,
+        "spearman_original_data": spearman_original_data
+    }
+
+
+def bssu_vs_bssu_method_correlation_plot(
+        percept_session: str,
+        bssu_version: str,
+        list_of_methods: list,
+        spearman_or_fisher_transformed: str
+):
+    """
+    Input: 
+        - spearman_or_fisher_transformed: "spearman" or "fisher_transformed"
+    """
+
+    data_organized_to_plot = pd.DataFrame()
+
+    data_loaded = bssu_vs_bssu_method_correlation(
+        percept_session=percept_session,
+        bssu_version=bssu_version,
+        list_of_methods=list_of_methods
+    )
+
+    pairs = list(combinations(list_of_methods, 2))
+
+    if spearman_or_fisher_transformed == "spearman":
+        data_all_methods = data_loaded["spearman_original_data"] 
+        title_str = "Spearman_correlation"
+
+    elif spearman_or_fisher_transformed == "fisher_transformed":
+        data_all_methods = data_loaded["organized_data"] 
+        title_str = "Spearman_correlation_fisher_transformed"
+
+    # list of all method comparisons
+    comparisons = []
+    for pair in pairs:
+        group1_spearman = pair[0]
+        group2_spearman = pair[1]
+
+        if group1_spearman == group2_spearman:
+            continue
+
+        comparisons.append(f"{group1_spearman}_{group2_spearman}")
+
+    for m, comp in enumerate(comparisons):
+
+        m_data = data_all_methods[comp].values
+        method_x = [m+1]*len(m_data)
+
+        data_to_plot = pd.DataFrame({"data_y": m_data, "method_x": method_x})
+        data_organized_to_plot = pd.concat([data_organized_to_plot, data_to_plot], ignore_index=True)
+    
+
+    # plot a violinplot
+    fig = plt.figure(figsize=[10,12]) 
+    ax = fig.add_subplot()
+
+    sns.violinplot(
+        data=data_organized_to_plot,
+        x="method_x",
+        y="data_y",
+        palette="coolwarm",
+        inner="box",
+        ax=ax,
+    )
+
+    # statistical test:
+    pairs = list(combinations(np.arange(1, len(list_of_methods)+1), 2))
+
+    annotator = Annotator(ax, pairs, data=data_organized_to_plot, x='method_x', y="data_y")
+    annotator.configure(test='Mann-Whitney', text_format='star')  # or t-test_ind ??
+    annotator.apply_and_annotate()
+
+    sns.stripplot(
+        data=data_organized_to_plot,
+        x="method_x",
+        y="data_y",
+        ax=ax,
+        size=8, # 6
+        color="black",
+        alpha=0.3,  # Transparency of dots
+    )
+
+    sns.despine(left=True, bottom=True)  # get rid of figure frame
+
+    plt.title(f"Beta Power {title_str}, {bssu_version} method comparisons \n6 directional contacts per lead")
+    plt.ylabel(f"{title_str} coefficient")
+    plt.xlabel("methods to estimate pseudo-monopolar beta power")
+    plt.xticks(range(len(comparisons)), comparisons, rotation=45)
+
+    fig.tight_layout()
+
+    io_externalized.save_fig_png_and_svg(path=GROUP_FIGURES_PATH,
+                                         filename=f"{title_str}_beta_power_of_{bssu_version}_comparisons_only_directional_{percept_session}",
+                                         figure=fig)
+
+
+    
+    return data_organized_to_plot
 
 

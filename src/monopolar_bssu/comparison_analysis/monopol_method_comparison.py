@@ -236,7 +236,7 @@ def correlation_monopol_fooof_beta_methods(
 
     elif bssu_version == "externalized":
         method_1_data = exclude_subjects(
-            df=method_1_data, exclude_list=EXCLUDED_NO_BETA_EXT
+            df=method_1_data, exclude_list=EXCLUDED_NO_BETA_EXT 
         )
         method_2_data = exclude_subjects(
             df=method_2_data, exclude_list=EXCLUDED_NO_BETA_EXT
