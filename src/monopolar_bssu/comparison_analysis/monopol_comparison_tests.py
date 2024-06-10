@@ -358,6 +358,13 @@ def rank_comparison_percept_methods(
         else:
             at_least_1_contact_matching = "no_contacts_match"
 
+        # check if rank 1 contacts are the same
+        # if rank1_method_1 == rank1_method_2:
+        #     rank_1_contacts_matching = "yes"
+        
+        # else: 
+        #     rank_1_contacts_matching = "no"
+
         # store values in a dictionary
         comparison_result_dict = {
             "method_1": [method_1],
@@ -373,6 +380,7 @@ def rank_comparison_percept_methods(
             # "bssu_best_contact_pair": [best_contact_pair],
             "both_contacts_matching": [both_contacts_matching],
             "at_least_1_contact_matching": [at_least_1_contact_matching],
+            #"rank_1_contacts_matching": [rank_1_contacts_matching]
         }
         comparison_single_result = pd.DataFrame(comparison_result_dict)
         comparison_result = pd.concat(
