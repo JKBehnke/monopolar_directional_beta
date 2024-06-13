@@ -1402,6 +1402,7 @@ def methods_vs_best_clinical_contacts(
             number_contacts_rel_above_70 = "n.a."
             compare_rel_above_70_contacts = "n.a."
             common_rel_above_70_at_least_2 = "n.a."
+            method_rank_1 = "n.a."
 
         elif method == f"detec_strelow_contacts{external_extension}":
             method_rank_1_and_2 = stn_method[stn_method["beta_rank"].isin([1.0, 2.0])]
@@ -1420,6 +1421,10 @@ def methods_vs_best_clinical_contacts(
             compare_rel_above_70_contacts = "n.a."
             common_rel_above_70_at_least_2 = "n.a."
 
+            ######################## rank 1 contact
+            method_rank_1 = stn_method[stn_method["beta_rank"] == 1.0]
+            method_rank_1 = method_rank_1.contact.values[0]
+
         else:
             method_rank_1_and_2 = stn_method[stn_method["beta_rank"].isin([1.0, 2.0])]
             if len(method_rank_1_and_2.contact.values) == 0:
@@ -1428,6 +1433,10 @@ def methods_vs_best_clinical_contacts(
                 )
                 continue
 
+            ######################## rank 1 contact
+            method_rank_1 = stn_method[stn_method["beta_rank"] == 1.0]
+            method_rank_1 = method_rank_1.contact.values[0]
+            
             method_rank_1_and_2 = method_rank_1_and_2[
                 "contact"
             ].tolist()  # list of contacts ranked 1 or 2
@@ -1465,6 +1474,7 @@ def methods_vs_best_clinical_contacts(
         else:
             compare_rank_1_and_2_contacts = "no_contacts_match"
 
+        
         # check if at least 2 contacts match the clinical contacts: rank method
         common_elements_rank_1_and_2 = set(clinical_contact_selection).intersection(
             set(method_rank_1_and_2)
@@ -1473,6 +1483,13 @@ def methods_vs_best_clinical_contacts(
             common_rank_1_and_2_at_least_2 = "yes"
         else:
             common_rank_1_and_2_at_least_2 = "no"
+        
+        ######################## rank 1 only ########################
+        # check if only rank 1 contact matches the clinical contacts
+        if method_rank_1 in clinical_contact_selection:
+            beta_rank_1_contact_active = "yes"
+        else:
+            beta_rank_1_contact_active = "no"
 
         # store values in a dictionary
         results_dict = {
@@ -1490,6 +1507,7 @@ def methods_vs_best_clinical_contacts(
             "compare_rel_above_70_contacts": [compare_rel_above_70_contacts],
             "both_contacts_matching_rank": [common_rank_1_and_2_at_least_2],
             "both_contacts_matching_rel_above_70": [common_rel_above_70_at_least_2],
+            "beta_rank_1_contact_active": [beta_rank_1_contact_active]
         }
         results_single_DF = pd.DataFrame(results_dict)
         results_DF = pd.concat([results_DF, results_single_DF], ignore_index=True)
@@ -1512,6 +1530,13 @@ def methods_vs_best_clinical_contacts(
     both_contacts_matching = both_contacts_matching["subject_hemisphere"].count()
     percentage_both_contacts_matching = both_contacts_matching / sub_hem_count
 
+    # count how often beta rank 1 contact was active
+    rank_1_contact_active = results_DF.loc[
+        results_DF["beta_rank_1_contact_active"] == "yes"
+    ]
+    rank_1_contact_active = rank_1_contact_active["subject_hemisphere"].count()
+    percentage_rank_1_contact_active = rank_1_contact_active / sub_hem_count
+
     sample_size_dict = {
         "method_1": ["best_clinical_contacts"],
         "method_2": [method],
@@ -1522,9 +1547,9 @@ def methods_vs_best_clinical_contacts(
         "both_contacts_matching": [both_contacts_matching],
         "percentage_both_contacts_matching": [percentage_both_contacts_matching],
         "at_least_1_contact_same": [at_least_1_same],
-        "percentage_at_least_one_same_contact_rank_1_and_2": [
-            percentage_at_least_1_same
-        ],
+        "percentage_at_least_one_same_contact_rank_1_and_2": [percentage_at_least_1_same],
+        "same_rank_1": [rank_1_contact_active],
+        "percentage_same_rank_1": [percentage_rank_1_contact_active]
     }
 
     sample_size_result = pd.DataFrame(sample_size_dict)
@@ -1608,7 +1633,7 @@ def group_rank_comparison_externalized_percept_clinical(
             percept_vs_externalized_fooof = percept_vs_externalized(
                 method=percept_m,
                 percept_session=percept_session,
-                strelow_level_first="level_first",
+                strelow_level_first= "all_directional", #"level_first",
                 externalized_version=ext_m,
                 fooof_version="v2",
                 new_reference=new_reference,

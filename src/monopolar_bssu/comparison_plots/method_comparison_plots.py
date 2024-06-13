@@ -161,7 +161,6 @@ def heatmap_method_comparison(
 
 
 def barplot_structure_method_validation_maximal_contacts(
-    percept_session: str,
     new_reference: str,
     bssu_version: str,
 ):
@@ -204,18 +203,18 @@ def barplot_structure_method_validation_maximal_contacts(
     for method in BSSU_METHODS:
         method_name = f"{method}{external_extension}"
 
-        if method == "detec_strelow_contacts":
-            comparison_methods = f"externalized_fooof_{method_name}"
+        # if method == "detec_strelow_contacts":
+        #     comparison_methods = f"externalized_fooof_{method_name}"
         
-        else:
-            comparison_methods = f"{method_name}_externalized_fooof"
+        # else:
+        comparison_methods = f"{method_name}_externalized_fooof"
 
         # load the comparison DF 
         load_data = monopol_comparison_tests.load_comparison_result_DF(
             method_comparison= comparison_methods, 
             comparison_file="rank", 
             clinical_session="fu12m", # irrelevant here
-            percept_session=percept_session, 
+            percept_session="postop", 
             fooof_version="v2", 
             bssu_version=bssu_version,
             new_reference="one_to_zero_two_to_three"
@@ -237,7 +236,6 @@ def barplot_structure_method_validation_maximal_contacts(
     return data_results_df
 
 def barplot_method_validation_maximal_contacts(
-    percept_session: str,
     new_reference: str,
     bssu_version: str,
 ):
@@ -250,12 +248,8 @@ def barplot_method_validation_maximal_contacts(
 
         - Validation of methods (percept or externalized) vs. externalized_fooof ("real" beta)
     """
-    questions = ["percentage_at_least_one_same_contact_rank_1_and_2",
-                 "percentage_both_contacts_matching",
-                 "percentage_same_rank_1"]
 
     loaded_data = barplot_structure_method_validation_maximal_contacts(
-        percept_session=percept_session,
         new_reference=new_reference,
         bssu_version=bssu_version
     )
@@ -266,7 +260,7 @@ def barplot_method_validation_maximal_contacts(
 
     # Plot each bar
     # Create the plot
-    plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(8, 6))
     sns.barplot(x='method', y='Value', hue='Questions', data=data_long)
 
     plt.ylim(0, 1)
@@ -276,15 +270,11 @@ def barplot_method_validation_maximal_contacts(
     plt.ylabel('Percentage of hemispheres')
     plt.title(f'Estimated vs. "real" Maximal beta contacts, {bssu_version}')
 
+    fig.tight_layout()
 
-
-
-
-
-        
-    
-
-
+    io_externalized.save_fig_png_and_svg(path=GROUP_FIGURES_PATH,
+                                         filename=f"Barplot_maximal_beta_contacts_matching_{bssu_version}_bssu_vs_externalized_fooof_only_directional",
+                                         figure=fig)
 
 
 ##################################### Correlation of beta power #####################################
@@ -522,13 +512,20 @@ def bssu_vs_externalized_plot(
     fig = plt.figure() 
     ax = fig.add_subplot()
 
-    sns.violinplot(
+    # sns.violinplot(
+    #     data=data_organized_to_plot,
+    #     x="method_x",
+    #     y="data_y",
+    #     palette="coolwarm",
+    #     inner="box",
+    #     ax=ax,
+    # )
+
+    sns.boxplot(
         data=data_organized_to_plot,
         x="method_x",
         y="data_y",
-        palette="coolwarm",
-        inner="box",
-        ax=ax,
+        ax=ax
     )
 
     # statistical test:
@@ -543,9 +540,11 @@ def bssu_vs_externalized_plot(
         x="method_x",
         y="data_y",
         ax=ax,
+        jitter=True,
+        edgecolor="gray",
         size=8, # 6
         color="black",
-        alpha=0.3,  # Transparency of dots
+        alpha=0.4,  # Transparency of dots
     )
 
     sns.despine(left=True, bottom=True)  # get rid of figure frame
@@ -741,16 +740,23 @@ def bssu_vs_bssu_method_correlation_plot(
     
 
     # plot a violinplot
-    fig = plt.figure(figsize=[10,12]) 
+    fig = plt.figure(figsize=[10,8]) # 10,12
     ax = fig.add_subplot()
 
-    sns.violinplot(
+    # sns.violinplot(
+    #     data=data_organized_to_plot,
+    #     x="method_x",
+    #     y="data_y",
+    #     palette="coolwarm",
+    #     inner="box",
+    #     ax=ax,
+    # )
+
+    sns.boxplot(
         data=data_organized_to_plot,
         x="method_x",
         y="data_y",
-        palette="coolwarm",
-        inner="box",
-        ax=ax,
+        ax=ax
     )
 
     # statistical test:
@@ -765,10 +771,13 @@ def bssu_vs_bssu_method_correlation_plot(
         x="method_x",
         y="data_y",
         ax=ax,
-        size=8, # 6
+        jitter=True,
+        edgecolor="black",
+        size=11, # 6
         color="black",
         alpha=0.3,  # Transparency of dots
     )
+
 
     sns.despine(left=True, bottom=True)  # get rid of figure frame
 
