@@ -567,13 +567,24 @@ def compare_rank_variability_of_different_epoch_lengths(
     fig = plt.figure() 
     ax = fig.add_subplot()
 
-    sns.violinplot(
+    # sns.violinplot(
+    #     data=data_organized_to_plot,
+    #     x="epoch_x",
+    #     y="epoch_data",
+    #     palette="coolwarm",
+    #     inner="box",
+    #     ax=ax,
+    # )
+
+    sns.boxplot(
         data=data_organized_to_plot,
         x="epoch_x",
         y="epoch_data",
-        palette="coolwarm",
-        inner="box",
-        ax=ax,
+        showmeans=True,
+        meanprops={"marker": "+",
+                       "markeredgecolor": "black",
+                       "markersize": "10"},
+        ax=ax
     )
 
     # statistical test:
@@ -588,9 +599,10 @@ def compare_rank_variability_of_different_epoch_lengths(
         x="epoch_x",
         y="epoch_data",
         ax=ax,
-        size=5, # 6
+        jitter=True,
         color="black",
-        alpha=0.3,  # Transparency of dots
+        size=11, # 5
+        alpha=0.2,  # Transparency of dots
     )
 
     sns.despine(left=True, bottom=True)  # get rid of figure frame

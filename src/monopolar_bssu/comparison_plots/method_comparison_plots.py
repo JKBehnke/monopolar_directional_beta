@@ -525,6 +525,10 @@ def bssu_vs_externalized_plot(
         data=data_organized_to_plot,
         x="method_x",
         y="data_y",
+        showmeans=True,
+        meanprops={"marker": "+",
+                       "markeredgecolor": "black",
+                       "markersize": "10"},
         ax=ax
     )
 
@@ -669,7 +673,7 @@ def bssu_vs_bssu_method_correlation(
                 "method_1": [comparison_1],
                 "method_2": [comparison_2],
                 "statistic": [statistic],
-                "p_value": [p_value],
+                "p_value": [f"{p_value: .5f}"],
                 "significant": [p_value < 0.05]
             }
 
@@ -756,6 +760,10 @@ def bssu_vs_bssu_method_correlation_plot(
         data=data_organized_to_plot,
         x="method_x",
         y="data_y",
+        showmeans=True,
+        meanprops={"marker": "+",
+                       "markeredgecolor": "black",
+                       "markersize": "10"},
         ax=ax
     )
 

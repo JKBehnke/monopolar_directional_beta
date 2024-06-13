@@ -1166,7 +1166,7 @@ def externalized_versions_comparison(
             "correlation": [corr],
             "corr_mean": [corr_mean],
             "corr_median": [corr_median],
-            "corr_std": [corr_std],
+            "corr_std": [f"{corr_std: .4f}"],
             "significant_count": [significant_count],
             "percentage_significant": [percentage_significant],
         }
