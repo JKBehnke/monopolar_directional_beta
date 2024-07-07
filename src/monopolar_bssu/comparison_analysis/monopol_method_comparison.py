@@ -102,6 +102,14 @@ EXCLUDED_NO_BETA_PERCEPT = [
     # "075_Right",
 ]
 
+# exclude hemispheres for comparisons with clinically active stimulation contacts
+# exclude hem with bipolar stimulaton, stimulation only at contact 0 or 3
+EXCLUDED_HEM_CLIN_STIM = [
+    "052_Left",
+    "019_Right",
+    "048_Right"
+]
+
 
 def exclude_subjects(df: pd.DataFrame, exclude_list: list):
     """
@@ -1248,6 +1256,9 @@ def methods_vs_best_clinical_contacts(
     results_DF = pd.DataFrame()
 
     best_clinical_contacts = io_monopolar_comparison.load_best_clinical_contacts()
+    # exclude hemispheres with complex stimulation or stimulation only at contacts 0 or 3
+    best_clinical_contacts = best_clinical_contacts[~(best_clinical_contacts.subject_hemisphere.isin(EXCLUDED_HEM_CLIN_STIM))]
+
     best_clinical_contacts_ses = best_clinical_contacts.loc[
         best_clinical_contacts.session == clinical_session
     ]
