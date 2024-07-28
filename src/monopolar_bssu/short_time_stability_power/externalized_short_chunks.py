@@ -335,6 +335,8 @@ def rank_power_2min_all_epochs(incl_sub:list, filtered:str, freq_band:str, chann
     This function ranks the 2min power for each subject and hemisphere
 
     Input:
+        - incl_sub: ["all"] or list of sub
+        - sec_per_epoch: e.g. 20
         - filtered: str "notch_and_band_pass_filtered", "unfiltered", "only_high_pass_filtered"
         - freq_band: str "beta", "high_beta", "low_beta"
         - channel_group: str "all", "ring", "segm_inter", "segm_intra", "segm"
