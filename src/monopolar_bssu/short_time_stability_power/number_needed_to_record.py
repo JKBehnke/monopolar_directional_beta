@@ -17,6 +17,7 @@ from statannotations.Annotator import Annotator
 # internal Imports
 from ..utils import find_folders as find_folders
 from ..utils import io_externalized as io_externalized
+from ..utils import io_monopolar_comparison as io_monopolar_comparison
 from ..utils import loadResults as loadResults
 from ..utils import sub_recordings_dict as sub_recordings_dict
 from ..utils import externalized_lfp_preprocessing as externalized_lfp_preprocessing
@@ -144,22 +145,6 @@ def load_ranks(
     # create a Dataframe from the dictionary with rows=sub_hem_chan and columns=windows
     return pd.DataFrame.from_dict(short_window_ranks, orient="index")
 
-def plot_distribution(
-    stability_distribution, bins, num_windows, stability_threshold
-):
-    """
-    Plot a distribution as histogram
-    
-    """
-
-    plt.hist(stability_distribution, bins=bins, edgecolor='k', alpha=0.7)
-    plt.xlabel('Proportion of Stable Patients')
-    plt.ylabel('Frequency')
-    plt.title(f'Distribution of Stable {stability_threshold} Proportions for {num_windows} Windows')
-    plt.show()
-
-
-    
         
 def stability_distribution_plot(
         incl_sub:list,
@@ -209,13 +194,22 @@ def stability_distribution_plot(
         proportion = stable_counts / len(data) # proportion of patients with stable counts per iteration
         stable_proportions.append(proportion) # list of proportions (n=1000)
     
-    hist_plot = plot_distribution(
-        stability_distribution=stable_proportions, 
-        bins=30, 
-        num_windows=num_windows, 
-        stability_threshold=stability_threshold
+    fig = plt.figure(figsize=(8,6))
+    plt.hist(stable_proportions, bins=30, edgecolor='k', alpha=0.7)
+    plt.xlabel('Proportion of Patients per Iteration')
+    plt.ylabel('Frequency')
+    plt.title(f'Distribution of Patient Proportion with Stable ({stability_threshold}) Rank {rank_of_interest}'+ 
+              f'\nfor {num_windows} Windows of {sec_per_epoch}s')
+    
+    fig.tight_layout()
+    
+    io_monopolar_comparison.save_fig_png_and_svg(
+        filename=f"distribution_stable_rank_{rank_of_interest}_"+
+        f"stability_threshold_{stability_threshold}_number_{sec_per_epoch}s_windows_{num_windows}_"+
+        f"{channel_group}_group_{freq_band}",
+        figure=fig,
     )
-
+  
     # give a summary of the distribution: count of all values
     value_counts = Counter(stable_proportions)
 
@@ -244,11 +238,10 @@ def calculate_p_val(stable_proportions:list,
     """
 
     mean_proportion = np.mean(stable_proportions)
-    ci_lower = np.percentile(stable_proportions, 2.5)
-    ci_upper = np.percentile(stable_proportions, 97.5)
-    p_value = (np.sum(np.array(stable_proportions) >= goal) / len(stable_proportions))
-
-
+    ci_lower = np.percentile(stable_proportions, 2.5) # 2.5th percentile
+    ci_upper = np.percentile(stable_proportions, 97.5) # 97.5th percentile used to construct a 95% CI
+    p_value = (np.sum(np.array(stable_proportions) >= goal) / len(stable_proportions)) # fraction of iterations meeting or exceeding the goal
+    # low p-value <.05 means Few iterations meet or exceed the goal, indicating that achieving the goal is rare and significantly difficult.
 
     return mean_proportion, ci_lower, ci_upper, p_value
 
@@ -312,33 +305,49 @@ def main_rank_stability_test(
         results.append((num, mean_proportion, ci_lower, ci_upper, p_value))
         result_summary = {
             "number_windows": [num],
+            "sec_per_epoch": [sec_per_epoch],
             "mean_proportion": [mean_proportion],
             "ci_lower": [ci_lower],
             "ci_upper": [ci_upper],
-            "p_value": [p_value]
+            "p_value": [p_value],
+            "stability_threshold": [stability_threshold],
+            "channel_group": [channel_group],
+            "freq_band": [freq_band],
         }
 
         results_dataframe = pd.DataFrame(result_summary)
         results_report = pd.concat([results_report, results_dataframe], ignore_index=True)
 
     # Print the results
-    for result in results:
-        print(f"Windows: {result[0]}, Mean Proportion: {result[1]}, CI: [{result[2]}, {result[3]}], P-Value: {result[4]}")
-    
-    
+    io_monopolar_comparison.save_result_excel(
+        result_df=results_report,
+        filename=f"across_num_windows_ci_patient_proportions_stable_rank_{rank_of_interest}_"+
+        f"stability_threshold_{stability_threshold}_{sec_per_epoch}s_windows_"+
+        f"{channel_group}_group_{freq_band}",
+        sheet_name="result"
+    )
 
     # Plot the results
     window_sizes, mean_props, ci_lowers, ci_uppers, p_values = zip(*results)
+ 
+    yerr = np.array([mean_props - np.array(ci_lowers), np.array(ci_uppers) - mean_props])
 
-    yerr = np.array([(mean_props[i] - ci_lowers[i], ci_uppers[i] - mean_props[i]) for i in range(len(mean_props))]).T
-    yerr = np.abs(yerr)
-
+    fig = plt.figure(figsize=(8,6))
     plt.errorbar(window_sizes, mean_props, yerr=yerr, fmt='o', capsize=5)
     plt.axhline(y=goal_stability, color='r', linestyle='-')
     plt.xlabel('Number of Windows')
-    plt.ylabel('Mean Proportion of Stable Patients')
-    plt.title('Mean Proportion of Stable Patients vs. Number of Windows')
-    plt.show()
+    plt.ylabel('Mean and CI of Patient Proportion with Stable Rank')
+    plt.ylim(0.3,1.0)
+    plt.title('Patient Proportions with Stable Ranks Across Number of Windows')
+    
+    fig.tight_layout()
+
+    io_monopolar_comparison.save_fig_png_and_svg(
+        filename=f"across_num_windows_ci_patient_proportions_stable_rank_{rank_of_interest}_"+
+        f"stability_threshold_{stability_threshold}_{sec_per_epoch}s_windows_"+
+        f"{channel_group}_group_{freq_band}",
+        figure=fig,
+    )
 
     return results_report, value_counts_results
 
