@@ -166,8 +166,9 @@ def most_frequent_integer(lst):
         else:
             count_dict[num] = 1
     max_count = max(count_dict.values())
-    most_frequent = [num for num, count in count_dict.items() if count == max_count]
-    return most_frequent
+    return [
+        num for num, count in count_dict.items() if count == max_count
+    ]  # returns a list of most frequent integers
 
 
 def stability_distribution_plot(
@@ -181,7 +182,7 @@ def stability_distribution_plot(
 ):
     """
     This function iterates (num_iterations times) and picks a certain number of windows (num_windows) randomly per channel.
-    From the selected windows it checks if the most common rank is the rank_of_interest.
+    From the selected windows it checks if the most common rank is rank 1 !(NOT the rank_of_interest).
 
     """
 
@@ -218,7 +219,7 @@ def stability_distribution_plot(
             if len(most_common_rank) > 1:
                 stability = False
             else:
-                stability = most_common_rank[0] == rank_of_interest
+                stability = most_common_rank[0] == 1  # rank_of_interest
 
             # stability is True only if 80% of windows show beta rank==rank_of_interest
             # proportion_stable = np.sum(selected_windows == rank_of_interest) / num_windows
@@ -235,6 +236,7 @@ def stability_distribution_plot(
     plt.hist(stable_proportions, bins=30, edgecolor="k", alpha=0.7)
     plt.xlabel("Proportion of Patients per Iteration")
     plt.ylabel("Frequency")
+    plt.xlim(0.3, 1.0)
     plt.title(
         f"Distribution of Patient Proportion with Stable Rank {rank_of_interest}"
         + f"\nfor {num_windows} Windows of {sec_per_epoch}s"
@@ -407,7 +409,7 @@ def main_rank_stability_test(
     plt.axhline(y=goal_stability, color="r", linestyle="-")
     plt.xlabel("Number of Windows")
     plt.ylabel("Mean and CI of Patient Proportion with Stable Rank")
-    plt.ylim(0.3, 1.0)
+    # plt.ylim(0.3, 1.0)
     plt.title("Patient Proportions with Stable Ranks Across Number of Windows")
 
     fig.tight_layout()
