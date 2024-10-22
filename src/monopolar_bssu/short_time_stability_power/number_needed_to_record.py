@@ -186,6 +186,8 @@ def stability_distribution_plot(
 
     """
 
+    np.random.seed(42)
+
     data = load_ranks(
         incl_sub=incl_sub,
         sec_per_epoch=sec_per_epoch,
@@ -409,7 +411,7 @@ def main_rank_stability_test(
     plt.axhline(y=goal_stability, color="r", linestyle="-")
     plt.xlabel("Number of Windows")
     plt.ylabel("Mean and CI of Patient Proportion with Stable Rank")
-    # plt.ylim(0.3, 1.0)
+    plt.ylim(0.3, 1.0)
     plt.title("Patient Proportions with Stable Ranks Across Number of Windows")
 
     fig.tight_layout()
